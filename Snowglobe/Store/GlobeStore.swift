@@ -20,6 +20,7 @@ final class GlobeStore {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         fileURL = directory.appending(path: "globes.json")
         load()
+        pruneTiles()
     }
 
     func globe(id: SnowGlobe.ID) -> SnowGlobe? {
@@ -38,12 +39,26 @@ final class GlobeStore {
         save()
     }
 
+    /// Fixes how much of the place a globe holds (picked once, with the zoom slider; see GlobeSizing).
+    func lockSize(id: SnowGlobe.ID, radiusMeters: Double) {
+        guard let index = globes.firstIndex(where: { $0.id == id }), !globes[index].isSizeLocked,
+              radiusMeters.isFinite, radiusMeters >= 1 else { return }
+        globes[index].radiusMeters = radiusMeters
+        globes[index].sizeLocked = true
+        save()
+    }
+
     func delete(id: SnowGlobe.ID) {
-        if let globe = globe(id: id) {
-            TileStore.remove(key: TileStore.key(for: globe)) // its saved 3D tiles
-        }
         globes.removeAll { $0.id == id }
         save()
+        pruneTiles() // its saved 3D tiles, unless another globe of the same place still uses them
+    }
+
+    /// Deletes saved tile sets that no globe needs any more (e.g. the wide set used while choosing a
+    /// size, once the size is locked). Runs at launch, when nothing is mid-copy, and after a delete.
+    private func pruneTiles() {
+        let keep = Set(globes.flatMap(TileStore.keys(for:)))
+        Task.detached(priority: .utility) { TileStore.prune(keeping: keep) }
     }
 
     // MARK: - Persistence

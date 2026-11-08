@@ -67,7 +67,7 @@ Without a key the app still builds and runs; globes just can't download 3D data.
 |---|---|
 | **Shelf** (home) | Tap a globe to open it. The **photo button** (top right) adds a globe from a photo. Long-press a globe to rename, rebuild or delete it. |
 | **Add a globe** | Choose a photo (its GPS location is read from the photo's metadata) or search for a place. Pick the size (Block 150 m → Landscape 1.5 km) and style (Satellite / Map / Winter), then **Make Snowglobe**. |
-| **Globe** | Drag sideways to spin it, drag up/down to tilt, pinch to zoom, double-tap to reset. Shake the phone, tap the globe, or press **Shake** to make it snow. **Info** shows the map, data sources and a rebuild button. |
+| **Globe** | Drag sideways to spin it, drag up/down to tilt, pinch to zoom, double-tap to reset. The first time a globe is opened, a **size slider** picks how much of the place fits under the glass (¼× to 4× its starting size); **Lock In Size** (or leaving the globe) fixes it for good. While choosing, every zoom is cut from one wide download, so dragging never waits on the network; locking then downloads sharp tiles for just the chosen size. Shake the phone, tap the globe, or press **Shake** to make it snow. **Info** shows the map, data sources and a rebuild button. |
 | **AR** | Move the phone to find a table or floor, tap to place the globe, then drag, rotate or pinch it. Dragging it around makes the snow slosh. |
 
 ---

@@ -14,6 +14,8 @@ struct GlobeDetailView: View {
     @Environment(GlobeStore.self) private var store
     @State private var loader = PhotorealDioramaLoader()
     @State private var showingAR = false
+    /// Size slider position while a new globe's size is being chosen: log2 of the zoom (0 = starting size).
+    @State private var zoomLog2: Double = 0
 
     var body: some View {
         ZStack {
@@ -30,6 +32,10 @@ struct GlobeDetailView: View {
                     header(for: globe)
                     Spacer()
                     status(for: globe)
+                    if !globe.isSizeLocked {
+                        sizeChooser(for: globe)
+                            .transition(.scale(scale: 0.9).combined(with: .opacity))
+                    }
                     Button {
                         showingAR = true
                     } label: {
@@ -39,12 +45,14 @@ struct GlobeDetailView: View {
                     }
                     .buttonStyle(.glassProminent)
                     .disabled(loader.content == nil)
-                    Text("Drag to spin · Pinch to zoom · Double-tap to reset")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .glassEffect()
+                    if globe.isSizeLocked {
+                        Text("Drag to spin · Pinch to zoom · Double-tap to reset")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .glassEffect()
+                    }
                     credits
                 }
                 .padding()
@@ -54,8 +62,23 @@ struct GlobeDetailView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .task(id: globeID) {
-            if let globe = store.globe(id: globeID) { await loader.load(globe) }
+        .task(id: LoadRequest(zoomLog2: zoomLog2, isSizeLocked: store.globe(id: globeID)?.isSizeLocked ?? true)) {
+            guard let globe = store.globe(id: globeID) else { return }
+            if loader.content != nil {
+                // A zoom change (or locking): wait for the slider to settle before re-cutting the place.
+                do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+            }
+            await loader.load(globe, zoom: exp2(zoomLog2))
+        }
+        .onDisappear {
+            // The size is chosen only on the first visit: leaving after the place has shown locks it in.
+            guard !showingAR, let globe = store.globe(id: globeID) else { return }
+            if !globe.isSizeLocked, loader.showsRealPlace {
+                lockSize(of: globe)
+            }
+            if let globe = store.globe(id: globeID) {
+                loader.finishLocking(globe)
+            }
         }
         .fullScreenCover(isPresented: $showingAR) {
             if let globe = store.globe(id: globeID) {
@@ -106,7 +129,7 @@ struct GlobeDetailView: View {
                 Label(message, systemImage: "exclamationmark.triangle")
                     .font(.footnote)
                 Button("Try Again") {
-                    Task { await loader.load(globe) }
+                    Task { await loader.load(globe, zoom: exp2(zoomLog2)) }
                 }
                 .buttonStyle(.glass)
             }
@@ -116,6 +139,87 @@ struct GlobeDetailView: View {
         case .idle, .ready:
             EmptyView()
         }
+    }
+
+    // MARK: - Choosing the size (first visit only)
+
+    private struct LoadRequest: Hashable {
+        var zoomLog2: Double
+        var isSizeLocked: Bool
+    }
+
+    private func lockSize(of globe: SnowGlobe) {
+        let radius = GlobeSizing.radius(baseRadius: globe.radiusMeters, zoom: exp2(zoomLog2))
+        withAnimation {
+            store.lockSize(id: globe.id, radiusMeters: radius)
+        }
+    }
+
+    /// Slider that zooms the place inside the glass (more of it, smaller ↔ less of it, bigger)
+    /// and a button that locks that size in for good.
+    private func sizeChooser(for globe: SnowGlobe) -> some View {
+        let zoom = Binding<Double>(
+            get: { zoomLog2 },
+            // Snap to the starting size, so it's easy to get back to.
+            set: { zoomLog2 = abs($0) < 0.15 ? 0 : $0 }
+        )
+        let across = Self.distanceText(2 * GlobeSizing.radius(baseRadius: globe.radiusMeters, zoom: exp2(zoomLog2)))
+        return VStack(spacing: 6) {
+            Text("How much should fit inside?")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Theme.snow)
+            HStack(spacing: 12) {
+                Image(systemName: "minus.magnifyingglass")
+                Slider(value: zoom, in: GlobeSizing.log2Range)
+                    .tint(Theme.ice)
+                    .accessibilityLabel("Size")
+                    .accessibilityValue("\(across) across")
+                Image(systemName: "plus.magnifyingglass")
+            }
+            .foregroundStyle(Theme.snow)
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 6) {
+                        Text("\(across) across")
+                            .font(.caption.monospacedDigit())
+                            .contentTransition(.numericText())
+                        if loader.isRebuilding {
+                            ProgressView()
+                                .controlSize(.mini)
+                        }
+                    }
+                    Text("You can only choose once")
+                        .font(.caption2)
+                }
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+                Spacer(minLength: 0)
+                Button {
+                    lockSize(of: globe)
+                } label: {
+                    Label("Lock In Size", systemImage: "lock.fill")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.glass)
+                .accessibilityHint("You can only choose the size once.")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(maxWidth: 340)
+        .glassEffect(in: .rect(cornerRadius: 22))
+        .disabled(!loader.showsRealPlace)
+        .opacity(loader.showsRealPlace ? 1 : 0.6)
+        .sensoryFeedback(.selection, trigger: zoomLog2 == 0) { _, isAtStartingSize in isAtStartingSize }
+    }
+
+    /// "85 m", "600 m", "1.2 km".
+    private static func distanceText(_ meters: Double) -> String {
+        if meters >= 1000 {
+            return String(format: meters >= 10_000 ? "%.0f km" : "%.1f km", meters / 1000)
+        }
+        let step: Double = meters < 100 ? 5 : 10
+        return "\(Int((meters / step).rounded() * step)) m"
     }
 
     /// Google requires its name and the data credits to be visible with the 3D content.

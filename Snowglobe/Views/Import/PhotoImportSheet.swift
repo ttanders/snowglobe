@@ -126,7 +126,7 @@ struct PhotoImportSheet: View {
             } header: {
                 Text("From Your Photo")
             } footer: {
-                Text("Your snowglobe will hold about \(radius.detail) around the spot where you took this photo.")
+                Text("Your snowglobe starts with about \(radius.detail) around the spot where you took this photo. The first time you open it, you can zoom in or out to choose how much fits inside.")
             }
 
             Section {
