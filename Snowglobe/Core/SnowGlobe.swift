@@ -172,6 +172,8 @@ struct SnowGlobe: Identifiable, Codable, Hashable, Sendable {
     var thumbnailVersion: Int
     /// True for the demo globes seeded on first launch.
     var isSample: Bool
+    /// Shown on the Favorites tab; toggled by double-tapping the globe.
+    var isFavorite: Bool
     /// True once the user has picked how much of the place fits inside (see GlobeSizing).
     /// Until then `radiusMeters` is just the starting size. Optional so older saved globes still load.
     var sizeLocked: Bool?
@@ -189,7 +191,8 @@ struct SnowGlobe: Identifiable, Codable, Hashable, Sendable {
         createdAt: Date = Date(),
         buildState: GlobeBuildState = .pending,
         thumbnailVersion: Int = 0,
-        isSample: Bool = false
+        isSample: Bool = false,
+        isFavorite: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -202,5 +205,29 @@ struct SnowGlobe: Identifiable, Codable, Hashable, Sendable {
         self.buildState = buildState
         self.thumbnailVersion = thumbnailVersion
         self.isSample = isSample
+        self.isFavorite = isFavorite
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, subtitle, coordinate, radiusMeters, style, photoDate, createdAt
+        case buildState, thumbnailVersion, isSample, isFavorite, sizeLocked
+    }
+
+    /// Custom decoding so globes saved before `isFavorite` / `sizeLocked` existed still load.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle)
+        coordinate = try container.decode(GeoCoordinate.self, forKey: .coordinate)
+        radiusMeters = try container.decode(Double.self, forKey: .radiusMeters)
+        style = try container.decode(GlobeStyle.self, forKey: .style)
+        photoDate = try container.decodeIfPresent(Date.self, forKey: .photoDate)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        buildState = try container.decode(GlobeBuildState.self, forKey: .buildState)
+        thumbnailVersion = try container.decode(Int.self, forKey: .thumbnailVersion)
+        isSample = try container.decode(Bool.self, forKey: .isSample)
+        isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
+        sizeLocked = try container.decodeIfPresent(Bool.self, forKey: .sizeLocked)
     }
 }

@@ -78,8 +78,9 @@ enum GlobeMetrics {
     /// Thumbnail framing contract shared by GlobeThumbnailRenderer (producer) and the shelf UI (consumer).
     /// All values are fractions of the square thumbnail's side length.
     enum Thumbnail {
-        /// Rendered size in pixels.
-        static let pixelSize = CGSize(width: 768, height: 768)
+        /// Rendered size in pixels. Same aspect ratio as the shelf's drawn globe (`GlobeIllustration`)
+        /// so the picture can replace the drawing without the shelf layout shifting.
+        static let pixelSize = CGSize(width: 810, height: 750)
         /// Approximate centre of the glass sphere's silhouette in the image (origin top-left).
         static let glassCenter = CGPoint(x: 0.5, y: 0.40)
         /// Approximate radius of the glass sphere's silhouette.

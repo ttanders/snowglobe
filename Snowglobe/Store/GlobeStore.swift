@@ -39,6 +39,12 @@ final class GlobeStore {
         save()
     }
 
+    func toggleFavorite(id: SnowGlobe.ID) {
+        guard let index = globes.firstIndex(where: { $0.id == id }) else { return }
+        globes[index].isFavorite.toggle()
+        save()
+    }
+
     /// Fixes how much of the place a globe holds (picked once, with the zoom slider; see GlobeSizing).
     func lockSize(id: SnowGlobe.ID, radiusMeters: Double) {
         guard let index = globes.firstIndex(where: { $0.id == id }), !globes[index].isSizeLocked,

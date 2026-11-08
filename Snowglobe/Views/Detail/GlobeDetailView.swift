@@ -40,14 +40,14 @@ struct GlobeDetailView: View {
                         showingAR = true
                     } label: {
                         Label("View in AR", systemImage: "arkit")
-                            .font(.headline)
+                            .font(Theme.font(.headline, weight: .semibold))
                             .padding(.horizontal, 8)
                     }
                     .buttonStyle(.glassProminent)
                     .disabled(loader.content == nil)
                     if globe.isSizeLocked {
                         Text("Drag to spin · Pinch to zoom · Double-tap to reset")
-                            .font(.footnote)
+                            .font(Theme.font(.footnote))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 10)
@@ -95,11 +95,11 @@ struct GlobeDetailView: View {
                 .multilineTextAlignment(.center)
             if let subtitle = globe.subtitle {
                 Text(subtitle)
-                    .font(.subheadline)
+                    .font(Theme.font(.subheadline))
                     .foregroundStyle(Theme.ice)
             }
             Text(globe.coordinate.formatted)
-                .font(.caption.monospacedDigit())
+                .font(Theme.font(.caption).monospacedDigit())
                 .foregroundStyle(.secondary)
             if let photoDate = globe.photoDate {
                 Label("Photo taken \(photoDate.formatted(date: .long, time: .omitted))", systemImage: "camera")
@@ -116,9 +116,9 @@ struct GlobeDetailView: View {
         case .loading(let message, let progress):
             VStack(spacing: 8) {
                 ProgressView(value: progress)
-                    .tint(Theme.ice)
+                    .tint(Theme.accent)
                 Text(message)
-                    .font(.footnote)
+                    .font(Theme.font(.footnote))
                     .foregroundStyle(.secondary)
             }
             .padding(14)
@@ -127,7 +127,7 @@ struct GlobeDetailView: View {
         case .failed(let message):
             VStack(spacing: 10) {
                 Label(message, systemImage: "exclamationmark.triangle")
-                    .font(.footnote)
+                    .font(Theme.font(.footnote))
                 Button("Try Again") {
                     Task { await loader.load(globe, zoom: exp2(zoomLog2)) }
                 }
@@ -229,10 +229,10 @@ struct GlobeDetailView: View {
             let others = loader.attributions.filter { $0 != "Google" }
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("Google Maps")
-                    .font(.caption.weight(.semibold))
+                    .font(Theme.font(.caption, weight: .semibold))
                 if !others.isEmpty {
                     Text(others.joined(separator: " · "))
-                        .font(.caption2)
+                        .font(Theme.font(.caption2))
                         .lineLimit(2)
                 }
             }
