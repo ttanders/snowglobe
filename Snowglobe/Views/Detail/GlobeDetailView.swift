@@ -78,6 +78,11 @@ struct GlobeDetailView: View {
             Text(globe.coordinate.formatted)
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
+            if let photoDate = globe.photoDate {
+                Label("Photo taken \(photoDate.formatted(date: .long, time: .omitted))", systemImage: "camera")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .allowsHitTesting(false)
     }

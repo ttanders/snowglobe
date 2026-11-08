@@ -5,6 +5,7 @@
 //  Home screen: snowglobes standing on wooden shelves, two per shelf.
 //
 
+import PhotosUI
 import SwiftUI
 
 struct ShelfView: View {
@@ -13,6 +14,10 @@ struct ShelfView: View {
     @State private var path: [SnowGlobe.ID] = []
     @State private var renameTarget: SnowGlobe?
     @State private var renameText = ""
+    /// The photo picked with the Import Photo button; non-nil while its sheet is open.
+    @State private var importedPhoto: PhotosPickerItem?
+    /// A globe just made from a photo, opened once the import sheet has closed.
+    @State private var globeToOpen: SnowGlobe.ID?
 
     private let globesPerShelf = 2
     private let columnSpacing: CGFloat = 18
@@ -46,6 +51,22 @@ struct ShelfView: View {
                     if let target = renameTarget { store.rename(id: target.id, to: renameText) }
                 }
                 Button("Cancel", role: .cancel) {}
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    // `.current` hands over the original file so its location and date metadata survive.
+                    PhotosPicker(selection: $importedPhoto, matching: .images, preferredItemEncoding: .current) {
+                        Label("Import Photo", systemImage: "photo.badge.plus")
+                    }
+                }
+            }
+            .sheet(isPresented: isImporting, onDismiss: openNewGlobe) {
+                if let importedPhoto {
+                    PhotoImportSheet(item: importedPhoto) { globe in
+                        store.add(globe)
+                        globeToOpen = globe.id
+                    }
+                }
             }
         }
     }
@@ -118,6 +139,16 @@ struct ShelfView: View {
 
     private var isRenaming: Binding<Bool> {
         Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })
+    }
+
+    private var isImporting: Binding<Bool> {
+        Binding(get: { importedPhoto != nil }, set: { if !$0 { importedPhoto = nil } })
+    }
+
+    private func openNewGlobe() {
+        guard let id = globeToOpen else { return }
+        globeToOpen = nil
+        path.append(id)
     }
 }
 

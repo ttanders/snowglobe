@@ -6,12 +6,12 @@ Pick a photo → the app reads where it was taken → it builds a miniature of t
 
 > Hackathon prototype — SwiftUI + RealityKit + ARKit + MapKit. No API keys, no third-party packages, no tests.
 
-## Status: stages 1, 2, 4 and 6 of 6
+## Status: stages 1, 2, 4, 5 and 6 of 6
 - [x] **1. Shelf**: home screen with four demo globes (2D drawings), rename/delete, tap to open a globe.
 - [x] **2. Live 3D globe**: slim octagonal wooden base, brass name plaque, glass dome, placeholder village inside; drag to spin/tilt, pinch to zoom, double-tap to reset.
 - [ ] **3. Snow + shake**: device shake / Shake button makes the snow swirl.
 - [x] **4. Real 3D places inside the globe**: Google Photorealistic 3D Tiles around the globe's location, cut into a disc that fits under the glass. Needs a Google key (see below).
-- [ ] **5. Add a globe from a photo's location.**
+- [x] **5. Add a globe from a photo's location**: the photo button (top right of the shelf) opens the system photo picker; the app reads where and when the photo was taken from its metadata, names the place with Apple Maps, and makes a 300 m globe there. (Place search and size/style pickers aren't built yet.)
 - [x] **6. View in AR**: find a table or floor, tap to place the globe (with the real place inside), drag/twist/pinch it. Needs a real iPhone.
 
 The rest of this README describes the full planned app; anything not ticked above isn't built yet.
@@ -65,7 +65,7 @@ Without a key the app still builds and runs; globes just can't download 3D data.
 ## Using the app
 | Screen | What you can do |
 |---|---|
-| **Shelf** (home) | Tap a globe to open it. **+** adds a globe. Long-press a globe to rename, rebuild or delete it. |
+| **Shelf** (home) | Tap a globe to open it. The **photo button** (top right) adds a globe from a photo. Long-press a globe to rename, rebuild or delete it. |
 | **Add a globe** | Choose a photo (its GPS location is read from the photo's metadata) or search for a place. Pick the size (Block 150 m → Landscape 1.5 km) and style (Satellite / Map / Winter), then **Make Snowglobe**. |
 | **Globe** | Drag sideways to spin it, drag up/down to tilt, pinch to zoom, double-tap to reset. Shake the phone, tap the globe, or press **Shake** to make it snow. **Info** shows the map, data sources and a rebuild button. |
 | **AR** | Move the phone to find a table or floor, tap to place the globe, then drag, rotate or pinch it. Dragging it around makes the snow slosh. |
@@ -102,11 +102,13 @@ All globe geometry uses **globe units**: the glass sphere has radius 1, the pede
 | Folder | What's inside |
 |---|---|
 | `Snowglobe/Core/` | Shared types: models (`SnowGlobe`), globe layout (`GlobeMetrics`), math helpers, theme colours, `Secrets`. |
+| `Snowglobe/Services/Photos/` | Reads a photo's GPS location and capture date (`PhotoMetadataReader`) and names the place (`PlaceNamer`). |
 | `Snowglobe/Services/GoogleTiles/` | Google Photorealistic 3D Tiles: client, tile selection, .glb parsing, circle cutting, loader. |
 | `Snowglobe/Rendering/Globe/` | RealityKit globe: pedestal, glass dome, materials, lighting, photo-real miniature entities. |
 | `Snowglobe/Store/` | `GlobeStore` (saved globes) and the demo globes. |
 | `Snowglobe/App/`, `Views/Shelf/` | App entry and the shelf home screen. |
 | `Snowglobe/Views/Detail/` | Single-globe 3D view, touch controls, loading/credits overlay. |
+| `Snowglobe/Views/Import/` | The sheet that turns a picked photo into a new globe. |
 | `Snowglobe/Views/AR/` | AR placement: world tracking, coaching overlay, tap to place, move/rotate/resize gestures. |
 
 The Xcode project uses a **synchronized folder**: any `.swift` file you create under `Snowglobe/` is compiled automatically. No project-file edits, no merge conflicts in `project.pbxproj`.
