@@ -97,6 +97,36 @@ enum RadiusPreset: Double, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// Choosing a new globe's size, once, the first time it's opened.
+///
+/// A new globe starts at its preset radius and shows a zoom slider. Zoom changes how much of the
+/// real world fits on the diorama disk: at zoom 2 the globe shows a circle half as wide, drawn
+/// twice as big. While choosing, every zoom is cut from ONE download covering the widest choice
+/// (`sizingRadius`), so dragging the slider never waits on the network. Google tile downloads are
+/// all about the same size, so that wide set is coarser; locking the size downloads sharp tiles
+/// for just the chosen circle (unless the tiles on hand are already detailed enough).
+enum GlobeSizing {
+    /// Slider range, in powers of two: 2⁻² = ¼× (zoomed out) … 2² = 4× (zoomed in).
+    static let log2Range: ClosedRange<Double> = -2...2
+    /// Tiles at most this much wider than the chosen circle are sharp enough to keep when locking.
+    static let reusableCoverage = 1.25
+
+    static func clamped(_ zoom: Double) -> Double {
+        guard zoom.isFinite, zoom > 0 else { return 1 }
+        return min(max(zoom, exp2(log2Range.lowerBound)), exp2(log2Range.upperBound))
+    }
+
+    /// Radius (meters) of the one download used while choosing: the widest zoom-out.
+    static func sizingRadius(baseRadius: Double) -> Double {
+        baseRadius / exp2(log2Range.lowerBound)
+    }
+
+    /// Radius (meters) shown at `zoom` for a globe that starts at `baseRadius`, rounded to whole meters.
+    static func radius(baseRadius: Double, zoom: Double) -> Double {
+        max((baseRadius / clamped(zoom)).rounded(), 1)
+    }
+}
+
 /// Lifecycle of a globe's 3D content.
 enum GlobeBuildState: Codable, Hashable, Sendable {
     /// Saved but not started (e.g. queued behind another build).
@@ -144,6 +174,11 @@ struct SnowGlobe: Identifiable, Codable, Hashable, Sendable {
     var isSample: Bool
     /// Shown on the Favorites tab; toggled by double-tapping the globe.
     var isFavorite: Bool
+    /// True once the user has picked how much of the place fits inside (see GlobeSizing).
+    /// Until then `radiusMeters` is just the starting size. Optional so older saved globes still load.
+    var sizeLocked: Bool?
+
+    var isSizeLocked: Bool { sizeLocked ?? false }
 
     init(
         id: UUID = UUID(),
@@ -175,10 +210,10 @@ struct SnowGlobe: Identifiable, Codable, Hashable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, title, subtitle, coordinate, radiusMeters, style, photoDate, createdAt
-        case buildState, thumbnailVersion, isSample, isFavorite
+        case buildState, thumbnailVersion, isSample, isFavorite, sizeLocked
     }
 
-    /// Custom decoding so globes saved before `isFavorite` existed still load.
+    /// Custom decoding so globes saved before `isFavorite` / `sizeLocked` existed still load.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
@@ -193,5 +228,6 @@ struct SnowGlobe: Identifiable, Codable, Hashable, Sendable {
         thumbnailVersion = try container.decode(Int.self, forKey: .thumbnailVersion)
         isSample = try container.decode(Bool.self, forKey: .isSample)
         isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
+        sizeLocked = try container.decodeIfPresent(Bool.self, forKey: .sizeLocked)
     }
 }

@@ -42,7 +42,7 @@ final class GlobeThumbnailStore {
             let loader = PhotorealDioramaLoader()
             await loader.load(globe)
             // Only real places get a picture; if loading failed, keep the drawing.
-            guard loader.phase == .ready, let content = loader.content else { continue }
+            guard loader.phase == .ready, loader.showsRealPlace, let content = loader.content else { continue }
 
             do {
                 let cgImage = try await GlobeThumbnailRenderer.render(globe: globe, content: content)
