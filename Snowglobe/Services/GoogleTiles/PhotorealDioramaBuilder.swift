@@ -29,6 +29,8 @@ struct PhotorealDiorama: @unchecked Sendable {
     /// Data credits to show on screen (Google first).
     var attributions: [String]
     var triangleCount: Int
+    /// Where falling snow comes to rest: the ground, rooftops and treetops of the miniature.
+    var snowSurface: SnowHeightField
 }
 
 enum PhotorealDioramaBuilder {
@@ -128,9 +130,16 @@ enum PhotorealDioramaBuilder {
             result.append(out)
         }
 
+        // 5. Where snow settles: the top of everything, seen from above.
+        var snow = SnowHeightField.Builder()
+        for mesh in result {
+            snow.addTriangles(positions: mesh.positions, indices: mesh.indices)
+        }
+
         return PhotorealDiorama(tiles: result, edge: edge,
                                 attributions: attributions(from: tiles.compactMap(\.copyright)),
-                                triangleCount: triangleCount)
+                                triangleCount: triangleCount,
+                                snowSurface: snow.field)
     }
 
     // MARK: - Helpers

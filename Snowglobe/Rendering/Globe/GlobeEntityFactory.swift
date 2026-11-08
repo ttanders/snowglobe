@@ -44,7 +44,17 @@ enum GlobeEntityFactory {
     }
 
     /// Y of the snowy ground's top surface (1 cm above the pedestal top).
-    static let surfaceY = GlobeMetrics.groundY + 0.01
+    static let surfaceY = GlobeMetrics.snowGroundTopY
+
+    /// See-through things inside a globe are drawn in a fixed order, so snow is always seen through
+    /// the near side of the glass but in front of the far side.
+    static let insideGlass = ModelSortGroup()
+
+    enum DrawOrder {
+        static let glassBack: Int32 = 0
+        static let snow: Int32 = 1
+        static let glassFront: Int32 = 2
+    }
 
     // MARK: - Pedestal
 
@@ -165,6 +175,8 @@ enum GlobeEntityFactory {
             occupied.append((point, 0.05))
             treeCount += 1
         }
+        // So falling snow settles on the roofs and treetops.
+        diorama.components.set(SnowSurfaceComponent(field: .measuring(diorama)))
         return diorama
     }
 
@@ -188,11 +200,21 @@ enum GlobeEntityFactory {
 
     // MARK: - Glass
 
-    private static func makeGlass() -> ModelEntity {
+    private static func makeGlass() -> Entity {
         // A dome cut off just below the ground line, so the glass never pokes out under the slim base.
         let dome = GlobeMeshes.dome(radius: GlobeMetrics.glassRadius, bottomY: GlobeMetrics.groundY - 0.01)
-        let glass = ModelEntity(mesh: dome, materials: [GlobeMaterials.glass])
+        let glass = Entity()
         glass.name = "Glass"
+        // The same dome twice: its far side (drawn before the snow) and its near side (drawn after).
+        for (side, culled, order) in [("Back", MaterialParameterTypes.FaceCulling.front, DrawOrder.glassBack),
+                                      ("Front", .back, DrawOrder.glassFront)] {
+            var material = GlobeMaterials.glass
+            material.faceCulling = culled
+            let half = ModelEntity(mesh: dome, materials: [material])
+            half.name = "Glass\(side)"
+            half.components.set(ModelSortGroupComponent(group: insideGlass, order: order))
+            glass.addChild(half)
+        }
         return glass
     }
 }

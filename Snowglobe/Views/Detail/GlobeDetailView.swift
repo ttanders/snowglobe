@@ -17,6 +17,10 @@ struct GlobeDetailView: View {
     @State private var showingAR = false
     /// Size slider position while a new globe's size is being chosen: log2 of the zoom (0 = starting size).
     @State private var zoomLog2: Double = 0
+    /// Presses of the Shake button.
+    @State private var shakeRequests = 0
+    /// Set the first time the user shakes the iPhone or taps a globe; until then the hint teaches it.
+    @AppStorage("hasStirredSnow") private var hasStirredSnow = false
 
     var body: some View {
         ZStack {
@@ -25,8 +29,12 @@ struct GlobeDetailView: View {
             if let globe = store.globe(id: globeID) {
                 // Only one 3D view at a time: this one shuts down while AR is open.
                 if !showingAR {
-                    GlobeSceneView(globe: globe, dioramaContent: loader.content)
-                        .ignoresSafeArea()
+                    GlobeSceneView(globe: globe, dioramaContent: loader.content, shakeRequests: shakeRequests) {
+                        if !hasStirredSnow {
+                            withAnimation(.easeInOut) { hasStirredSnow = true }
+                        }
+                    }
+                    .ignoresSafeArea()
                 }
 
                 VStack(spacing: 12) {
@@ -37,22 +45,29 @@ struct GlobeDetailView: View {
                         sizeChooser(for: globe)
                             .transition(.scale(scale: 0.9).combined(with: .opacity))
                     }
-                    Button {
-                        showingAR = true
-                    } label: {
-                        Label("View in AR", systemImage: "arkit")
-                            .font(Theme.font(.headline, weight: .semibold))
-                            .padding(.horizontal, 8)
+                    HStack(spacing: 12) {
+                        Button {
+                            shakeRequests += 1
+                        } label: {
+                            Label("Shake", systemImage: "wind.snow")
+                                .font(Theme.font(.headline, weight: .semibold))
+                                .padding(.horizontal, 4)
+                        }
+                        .buttonStyle(.glass)
+                        .accessibilityHint("Makes it snow inside the globe.")
+                        Button {
+                            showingAR = true
+                        } label: {
+                            Label("View in AR", systemImage: "arkit")
+                                .font(Theme.font(.headline, weight: .semibold))
+                                .padding(.horizontal, 8)
+                        }
+                        .buttonStyle(.glassProminent)
+                        .disabled(loader.content == nil)
                     }
-                    .buttonStyle(.glassProminent)
-                    .disabled(loader.content == nil)
-                    if globe.isSizeLocked {
-                        Text("Drag to spin · Pinch to zoom · Double-tap to reset")
-                            .font(Theme.font(.footnote))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .glassEffect()
+                    if globe.isSizeLocked && !hasStirredSnow {
+                        snowHint
+                            .transition(.opacity)
                     }
                     credits
                 }
@@ -132,6 +147,18 @@ struct GlobeDetailView: View {
             }
         }
         .allowsHitTesting(false)
+    }
+
+    /// Teaches making it snow; gone for good once the user has done it themselves.
+    private var snowHint: some View {
+        Text("Shake your iPhone or tap the glass to make it snow")
+            .font(Theme.font(.footnote))
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .glassEffect()
+            .allowsHitTesting(false)
     }
 
     @ViewBuilder

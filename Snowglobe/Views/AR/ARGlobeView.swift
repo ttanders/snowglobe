@@ -5,10 +5,15 @@
 //  Full-screen AR: find a table or floor, tap to place the snowglobe, then drag to move it,
 //  twist to rotate and pinch to resize. Needs a real iPhone (the Simulator has no camera).
 //
+//  Snow: the globe stands on the table, not in your hand, so moving the iPhone doesn't stir it.
+//  Dragging or twisting the globe does (the snow lags behind the glass), as do tapping it and
+//  the Shake button, which makes it hop and rattle.
+//
 
 import SwiftUI
 import RealityKit
 import ARKit
+import Combine
 
 struct ARGlobeView: View {
     let globe: SnowGlobe
@@ -58,10 +63,17 @@ struct ARGlobeView: View {
             .glassEffect(in: .rect(cornerRadius: 18))
             .animation(.default, value: controller.hint)
         if controller.isPlaced {
-            Button("Place Again", systemImage: "arrow.counterclockwise") {
-                controller.placeAgain()
+            HStack(spacing: 12) {
+                Button("Place Again", systemImage: "arrow.counterclockwise") {
+                    controller.placeAgain()
+                }
+                .buttonStyle(.glass)
+                Button("Shake", systemImage: "wind.snow") {
+                    controller.shake()
+                }
+                .buttonStyle(.glass)
+                .accessibilityHint("Makes it snow inside the globe.")
             }
-            .buttonStyle(.glass)
         }
     }
 
@@ -101,14 +113,19 @@ struct ARGlobeView: View {
 @MainActor @Observable
 final class ARGlobeController {
     static let findSurfaceHint = "Move your iPhone slowly to find a table or floor, then tap to place your snowglobe."
-    static let placedHint = "Drag to move · Twist to rotate · Pinch to resize"
+    static let placedHint = "Tap the globe to make it snow\nDrag to move · Twist to rotate · Pinch to resize"
 
     var isPlaced = false
     var hint = ARGlobeController.findSurfaceHint
     @ObservationIgnored var onPlaceAgain: (() -> Void)?
+    @ObservationIgnored var onShake: (() -> Void)?
 
     func placeAgain() {
         onPlaceAgain?()
+    }
+
+    func shake() {
+        onShake?()
     }
 }
 
@@ -143,17 +160,30 @@ struct ARGlobeSceneView: UIViewRepresentable {
         private var globe: Entity?
         private var anchor: AnchorEntity?
         private var placementGestures: [UIGestureRecognizer] = []
+        private var snow: SnowController?
+        private let rattle = GlobeRattlePlayer()
+        private let tapFeedback = UIImpactFeedbackGenerator(style: .light)
+        private var updateSubscription: (any Cancellable)?
+        /// Height of the globe's centre above the table (globe units): the pedestal stands on the surface.
+        private let lift = -GlobeMetrics.baseBottomY
 
         init(controller: ARGlobeController) {
             self.controller = controller
             super.init()
             controller.onPlaceAgain = { [weak self] in self?.removePlacedGlobe() }
+            controller.onShake = { [weak self] in self?.shakeGlobe() }
         }
 
         func start(arView: ARView, globe: Entity) {
             self.arView = arView
             self.globe = globe
             addGroundingShadows(to: globe)
+            snow = SnowController(globe: globe, startsSnowing: false)
+            updateSubscription = arView.scene.subscribe(to: SceneEvents.Update.self) { [weak self] event in
+                MainActor.assumeIsolated {
+                    self?.step(deltaTime: Float(event.deltaTime))
+                }
+            }
 
             let configuration = ARWorldTrackingConfiguration()
             configuration.planeDetection = [.horizontal]
@@ -173,15 +203,48 @@ struct ARGlobeSceneView: UIViewRepresentable {
         }
 
         func stop() {
+            updateSubscription?.cancel()
+            updateSubscription = nil
+            snow?.stop()
             arView?.session.pause()
             if let anchor { arView?.scene.removeAnchor(anchor) }
+        }
+
+        // MARK: - Snow
+
+        private func step(deltaTime: Float) {
+            guard anchor != nil, let arView, let globe else { return }
+            let pose = rattle.advance(by: deltaTime)
+            globe.position = SIMD3(0, lift, 0) + pose.offset
+            globe.orientation = simd_quatf(angle: pose.roll, axis: [0, 0, 1])
+            snow?.update(deltaTime: deltaTime, camera: arView.cameraTransform)
+        }
+
+        /// The Shake button: the globe hops and rattles on the table, and its motion stirs the snow.
+        private func shakeGlobe() {
+            guard anchor != nil else { return }
+            if UIAccessibility.isReduceMotionEnabled {
+                snow?.shake()
+                tapFeedback.impactOccurred()
+            } else {
+                rattle.start()
+                snow?.shake(strength: 0.5)
+            }
         }
 
         // MARK: - Placement
 
         @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
-            guard anchor == nil, let arView, let globe else { return }
+            guard let arView, let globe else { return }
             let point = gesture.location(in: arView)
+            if anchor != nil {
+                // Placed: tapping the globe flicks the snow inside.
+                if let ray = arView.ray(through: point),
+                   let target = snow?.tap(rayOrigin: ray.origin, direction: ray.direction) {
+                    tapFeedback.impactOccurred(intensity: target == .glass ? 0.6 : 0.9)
+                }
+                return
+            }
             guard let result = arView.raycast(from: point, allowing: .estimatedPlane, alignment: .horizontal).first else {
                 controller.hint = "Couldn't find a surface there. Keep moving your iPhone slowly and tap again."
                 return
@@ -197,7 +260,6 @@ struct ARGlobeSceneView: UIViewRepresentable {
             // raised so the bottom of the pedestal sits on the surface.
             let holder = ModelEntity()
             holder.name = "GlobeHolder"
-            let lift = -GlobeMetrics.baseBottomY
             globe.position = [0, lift, 0]
             holder.addChild(globe)
             let baseWidth = (GlobeMetrics.baseRadius + 0.06) * 2
@@ -225,6 +287,8 @@ struct ARGlobeSceneView: UIViewRepresentable {
             self.anchor = anchor
             controller.isPlaced = true
             controller.hint = ARGlobeController.placedHint
+            // Like a globe just set down after being carried over: snow drifting down.
+            if !UIAccessibility.isReduceMotionEnabled { snow?.scatter() }
         }
 
         private func removePlacedGlobe() {

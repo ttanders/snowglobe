@@ -44,6 +44,7 @@ enum PhotorealDioramaEntity {
             material.faceCulling = .none
             content.addChild(ModelEntity(mesh: try await MeshResource(from: [descriptor]), materials: [material]))
         }
+        content.components.set(SnowSurfaceComponent(field: diorama.snowSurface))
         return content
     }
 

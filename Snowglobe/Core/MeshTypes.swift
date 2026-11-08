@@ -67,7 +67,7 @@ struct SnowHeightField: Sendable {
     var extent: Float
     /// `resolution * resolution` surface Y values (globe-local), row-major.
     /// Row index follows z (row 0 = z = -extent, i.e. the NORTH edge); column index follows x (col 0 = x = -extent, west).
-    /// Each cell stores the MAX surface height inside it (so flakes rest on roofs, not beside them).
+    /// Each cell stores the height of the TOPMOST surface at its centre (so flakes rest on roofs, not inside them).
     var heights: [Float]
 
     init(resolution: Int, extent: Float, heights: [Float]) {
@@ -76,18 +76,18 @@ struct SnowHeightField: Sendable {
         self.heights = heights
     }
 
-    /// A flat field at `y` (used for placeholders and as a fallback).
+    /// A flat field at `y` (the bare snowy ground; used while nothing stands inside the glass).
     static func flat(resolution: Int = 8,
                      extent: Float = GlobeMetrics.snowRingRadius,
-                     y: Float = GlobeMetrics.groundY) -> SnowHeightField {
+                     y: Float = GlobeMetrics.snowGroundTopY) -> SnowHeightField {
         SnowHeightField(resolution: resolution, extent: extent,
                         heights: Array(repeating: y, count: resolution * resolution))
     }
 
-    /// Surface Y at globe-local (x, z) using nearest-cell lookup; `GlobeMetrics.groundY` outside the grid.
+    /// Surface Y at globe-local (x, z) using nearest-cell lookup; the snowy ground's top outside the grid.
     func surfaceY(x: Float, z: Float) -> Float {
         guard resolution > 0, heights.count == resolution * resolution, extent > 0,
-              abs(x) <= extent, abs(z) <= extent else { return GlobeMetrics.groundY }
+              abs(x) <= extent, abs(z) <= extent else { return GlobeMetrics.snowGroundTopY }
         let n = Float(resolution)
         let col = min(resolution - 1, max(0, Int((x + extent) / (2 * extent) * n)))
         let row = min(resolution - 1, max(0, Int((z + extent) / (2 * extent) * n)))
