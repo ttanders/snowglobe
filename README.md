@@ -6,13 +6,13 @@ Pick a photo → the app reads where it was taken → it builds a miniature of t
 
 > Hackathon prototype — SwiftUI + RealityKit + ARKit + MapKit. No API keys, no third-party packages, no tests.
 
-## Status: stages 1, 2 and 4 of 6
+## Status: stages 1, 2, 4 and 6 of 6
 - [x] **1. Shelf**: home screen with four demo globes (2D drawings), rename/delete, tap to open a globe.
 - [x] **2. Live 3D globe**: slim octagonal wooden base, brass name plaque, glass dome, placeholder village inside; drag to spin/tilt, pinch to zoom, double-tap to reset.
 - [ ] **3. Snow + shake**: device shake / Shake button makes the snow swirl.
 - [x] **4. Real 3D places inside the globe**: Google Photorealistic 3D Tiles around the globe's location, cut into a disc that fits under the glass. Needs a Google key (see below).
 - [ ] **5. Add a globe from a photo's location.**
-- [ ] **6. View in AR.**
+- [x] **6. View in AR**: find a table or floor, tap to place the globe (with the real place inside), drag/twist/pinch it. Needs a real iPhone.
 
 The rest of this README describes the full planned app; anything not ticked above isn't built yet.
 
@@ -106,6 +106,7 @@ All globe geometry uses **globe units**: the glass sphere has radius 1, the pede
 | `Snowglobe/Store/` | `GlobeStore` (saved globes) and the demo globes. |
 | `Snowglobe/App/`, `Views/Shelf/` | App entry and the shelf home screen. |
 | `Snowglobe/Views/Detail/` | Single-globe 3D view, touch controls, loading/credits overlay. |
+| `Snowglobe/Views/AR/` | AR placement: world tracking, coaching overlay, tap to place, move/rotate/resize gestures. |
 
 The Xcode project uses a **synchronized folder**: any `.swift` file you create under `Snowglobe/` is compiled automatically. No project-file edits, no merge conflicts in `project.pbxproj`.
 

@@ -43,8 +43,16 @@ final class PhotorealDioramaLoader {
 
         do {
             phase = .loading(message: "Finding Google's 3D tiles…", progress: 0.05)
-            let selector = TileSelector(client: .shared, center: globe.coordinate, radiusMeters: globe.radiusMeters)
-            let urls = try await selector.select()
+            let client = GoogleTilesClient.shared
+            _ = try await client.root() // reuses the saved session when it's still valid
+            let urls: [URL]
+            if let saved = await client.savedSelection(for: key) {
+                urls = saved
+            } else {
+                let selector = TileSelector(client: client, center: globe.coordinate, radiusMeters: globe.radiusMeters)
+                urls = try await selector.select()
+                await client.saveSelection(urls, for: key)
+            }
             guard !urls.isEmpty else { throw GoogleTilesError.nothingHere }
 
             phase = .loading(message: "Downloading \(urls.count) tiles…", progress: 0.15)

@@ -13,20 +13,32 @@ struct GlobeDetailView: View {
 
     @Environment(GlobeStore.self) private var store
     @State private var loader = PhotorealDioramaLoader()
+    @State private var showingAR = false
 
     var body: some View {
         ZStack {
             Color(uiColor: Theme.sceneBackground).ignoresSafeArea()
 
             if let globe = store.globe(id: globeID) {
-                GlobeSceneView(globe: globe, dioramaContent: loader.content)
-                    .ignoresSafeArea()
-                    .task(id: globe.id) { await loader.load(globe) }
+                // Only one 3D view at a time: this one shuts down while AR is open.
+                if !showingAR {
+                    GlobeSceneView(globe: globe, dioramaContent: loader.content)
+                        .ignoresSafeArea()
+                }
 
                 VStack(spacing: 12) {
                     header(for: globe)
                     Spacer()
                     status(for: globe)
+                    Button {
+                        showingAR = true
+                    } label: {
+                        Label("View in AR", systemImage: "arkit")
+                            .font(.headline)
+                            .padding(.horizontal, 8)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .disabled(loader.content == nil)
                     Text("Drag to spin · Pinch to zoom · Double-tap to reset")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -42,6 +54,14 @@ struct GlobeDetailView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
+        .task(id: globeID) {
+            if let globe = store.globe(id: globeID) { await loader.load(globe) }
+        }
+        .fullScreenCover(isPresented: $showingAR) {
+            if let globe = store.globe(id: globeID) {
+                ARGlobeView(globe: globe, content: loader.content, attributions: loader.attributions)
+            }
+        }
     }
 
     private func header(for globe: SnowGlobe) -> some View {
