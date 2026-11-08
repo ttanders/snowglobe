@@ -9,6 +9,8 @@ import SwiftUI
 
 struct FallingSnowView: View {
     var flakeCount = 70
+    /// Flake colour; tinted so the snow stays visible on light backgrounds.
+    var color: Color = .white
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -27,7 +29,7 @@ struct FallingSnowView: View {
                     let y = (startY * travel + t * speed).truncatingRemainder(dividingBy: travel) - 5
                     let x = startX * size.width + sin(t * 0.5 + phase) * 14
                     ctx.fill(Path(ellipseIn: CGRect(x: x, y: y, width: radius * 2, height: radius * 2)),
-                             with: .color(.white.opacity(0.18 + radius * 0.12)))
+                             with: .color(color.opacity(0.18 + radius * 0.12)))
                 }
             }
         }

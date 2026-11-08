@@ -38,6 +38,12 @@ final class GlobeStore {
         save()
     }
 
+    func toggleFavorite(id: SnowGlobe.ID) {
+        guard let index = globes.firstIndex(where: { $0.id == id }) else { return }
+        globes[index].isFavorite.toggle()
+        save()
+    }
+
     func delete(id: SnowGlobe.ID) {
         globes.removeAll { $0.id == id }
         save()

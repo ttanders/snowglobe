@@ -44,7 +44,7 @@ struct GlobeIllustration: View {
             ctx.fill(Path(ellipseIn: CGRect(x: center.x + r * 0.45, y: center.y - r * 0.55, width: r * 0.1, height: r * 0.1)),
                      with: .color(.white.opacity(0.5)))
 
-            // 3. Pedestal: brass band + wooden trapezoid + plaque.
+            // 3. Pedestal: white band + frosted blue trapezoid + plaque.
             let baseBottom = size.height
             var pedestal = Path()
             pedestal.move(to: CGPoint(x: center.x - r * 0.72, y: baseTop))
@@ -53,18 +53,18 @@ struct GlobeIllustration: View {
             pedestal.addLine(to: CGPoint(x: center.x - r * 0.8, y: baseBottom))
             pedestal.closeSubpath()
             ctx.fill(pedestal, with: .linearGradient(
-                Gradient(colors: [Theme.wood, Theme.woodDark]),
+                Gradient(colors: [Theme.ice, Theme.accent]),
                 startPoint: CGPoint(x: center.x - r, y: baseTop),
                 endPoint: CGPoint(x: center.x + r, y: baseBottom)))
 
             let band = CGRect(x: center.x - r * 0.74, y: baseTop - r * 0.02, width: r * 1.48, height: r * 0.08)
             ctx.fill(Path(roundedRect: band, cornerRadius: r * 0.03), with: .linearGradient(
-                Gradient(colors: [Theme.brass, Theme.brass.opacity(0.6)]),
+                Gradient(colors: [Theme.snow, Theme.frost]),
                 startPoint: CGPoint(x: band.minX, y: band.minY), endPoint: CGPoint(x: band.maxX, y: band.maxY)))
 
             let plaque = CGRect(x: center.x - r * 0.3, y: baseTop + (baseBottom - baseTop) * 0.38,
                                 width: r * 0.6, height: (baseBottom - baseTop) * 0.34)
-            ctx.fill(Path(roundedRect: plaque, cornerRadius: r * 0.03), with: .color(Theme.brass.opacity(0.85)))
+            ctx.fill(Path(roundedRect: plaque, cornerRadius: r * 0.03), with: .color(Theme.snow.opacity(0.85)))
         }
         .aspectRatio(Self.aspectRatio, contentMode: .fit)
     }
