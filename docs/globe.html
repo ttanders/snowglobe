@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Snowglobe</title>
+    <meta name="description" content="A real place, under glass. Made with Snowglobe.">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <link rel="stylesheet" href="style.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+            "3d-tiles-renderer": "https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.5.4/build/index.js",
+            "3d-tiles-renderer/plugins": "https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.5.4/build/index.plugins.js"
+        }
+    }
+    </script>
+</head>
+<body>
+    <canvas id="snow" aria-hidden="true"></canvas>
+    <div class="globe-page">
+        <header>
+            <h1 id="title">Snowglobe</h1>
+            <p class="subtitle" id="subtitle" hidden></p>
+            <p class="coordinates" id="coordinates"></p>
+        </header>
+
+        <div class="stage">
+            <canvas id="globe" aria-label="3D snowglobe. Drag to spin, pinch or scroll to zoom."></canvas>
+            <div class="status glass-pill" id="status">Opening your snowglobe…</div>
+        </div>
+
+        <div class="hint glass-pill">Drag to spin · Pinch to zoom · Double-tap to reset</div>
+
+        <div class="credits" id="credits" hidden></div>
+
+        <footer>Made with Snowglobe · <a href="./">What's this?</a></footer>
+    </div>
+
+    <script src="snow.js"></script>
+    <script src="config.js"></script>
+    <script type="module" src="globe.js"></script>
+</body>
+</html>

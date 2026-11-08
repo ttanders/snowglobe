@@ -1,0 +1,139 @@
+/* Snowglobe web viewer — same night-sky look as the app (see Theme.swift). */
+
+:root {
+    --night-top: rgb(13, 18, 41);
+    --night-bottom: rgb(33, 46, 84);
+    --snow: #ffffff;
+    --ice: rgb(168, 217, 255);
+    --accent: rgb(84, 158, 237);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    height: 100%;
+    font-family: "Inter", "InterVariable", system-ui, -apple-system, sans-serif;
+    color: var(--snow);
+    background: linear-gradient(var(--night-top), var(--night-bottom)) fixed;
+    -webkit-font-smoothing: antialiased;
+}
+
+#snow {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+}
+
+h1 {
+    margin: 0;
+    font-size: clamp(30px, 7vw, 44px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.subtitle {
+    margin: 4px 0 0;
+    color: var(--ice);
+    font-size: 15px;
+}
+
+a { color: var(--ice); }
+
+/* Landing page */
+.landing {
+    position: relative;
+    z-index: 1;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 64px 24px;
+    line-height: 1.5;
+}
+
+/* Globe page */
+.globe-page {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 28px 20px 20px;
+}
+
+.globe-page header { margin-bottom: 8px; }
+
+.coordinates {
+    margin: 4px 0 0;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.stage {
+    position: relative;
+    flex: 1;
+    min-height: 360px;
+}
+
+#globe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    cursor: grab;
+}
+
+#globe:active { cursor: grabbing; }
+
+.glass-pill {
+    padding: 10px 16px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.hint {
+    align-self: center;
+    margin-top: 14px;
+}
+
+.status {
+    position: absolute;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    max-width: min(90%, 360px);
+    text-align: center;
+    border-radius: 18px;
+}
+
+.status[hidden] { display: none; }
+
+/* Google requires its name and the data credits to stay visible with the 3D content. */
+.credits {
+    margin-top: 16px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.75);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.credits strong { font-size: 12px; }
+.credits img { height: 16px; }
+
+footer {
+    margin-top: 18px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+}

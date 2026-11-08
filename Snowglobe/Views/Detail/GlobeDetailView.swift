@@ -12,6 +12,7 @@ struct GlobeDetailView: View {
     let globeID: SnowGlobe.ID
 
     @Environment(GlobeStore.self) private var store
+    @Environment(GlobeThumbnailStore.self) private var thumbnails
     @State private var loader = PhotorealDioramaLoader()
     @State private var showingAR = false
     /// Size slider position while a new globe's size is being chosen: log2 of the zoom (0 = starting size).
@@ -62,6 +63,13 @@ struct GlobeDetailView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            if let globe = store.globe(id: globeID) {
+                ToolbarItem(placement: .topBarTrailing) {
+                    shareButton(for: globe)
+                }
+            }
+        }
         .task(id: LoadRequest(zoomLog2: zoomLog2, isSizeLocked: store.globe(id: globeID)?.isSizeLocked ?? true)) {
             guard let globe = store.globe(id: globeID) else { return }
             if loader.content != nil {
@@ -84,6 +92,22 @@ struct GlobeDetailView: View {
             if let globe = store.globe(id: globeID) {
                 ARGlobeView(globe: globe, content: loader.content, attributions: loader.attributions)
             }
+        }
+    }
+
+    /// Shares a web link that opens this globe in a browser (see GlobeShareLink), previewed with
+    /// the shelf picture when one has been rendered.
+    @ViewBuilder
+    private func shareButton(for globe: SnowGlobe) -> some View {
+        let url = GlobeShareLink.url(for: globe)
+        let subject = Text("\(globe.title) snowglobe")
+        let message = Text("Take a look at my \(globe.title) snowglobe!")
+        if let picture = thumbnails.image(for: globe.id) {
+            ShareLink(item: url, subject: subject, message: message,
+                      preview: SharePreview(globe.title, image: Image(uiImage: picture)))
+        } else {
+            ShareLink(item: url, subject: subject, message: message,
+                      preview: SharePreview(globe.title))
         }
     }
 
