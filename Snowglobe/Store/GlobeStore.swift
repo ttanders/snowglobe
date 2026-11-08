@@ -54,6 +54,15 @@ final class GlobeStore {
         save()
     }
 
+    /// Moves a globe to a new position on the shelf (used by drag-to-rearrange).
+    func move(id: SnowGlobe.ID, to newIndex: Int) {
+        guard let oldIndex = globes.firstIndex(where: { $0.id == id }), oldIndex != newIndex,
+              globes.indices.contains(newIndex) else { return }
+        let globe = globes.remove(at: oldIndex)
+        globes.insert(globe, at: newIndex)
+        save()
+    }
+
     func delete(id: SnowGlobe.ID) {
         globes.removeAll { $0.id == id }
         save()
