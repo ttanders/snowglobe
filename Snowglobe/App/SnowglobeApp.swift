@@ -12,6 +12,7 @@ struct SnowglobeApp: App {
 
     init() {
         Theme.registerFonts()
+        SnowSurfaceComponent.registerComponent()
     }
 
     var body: some Scene {

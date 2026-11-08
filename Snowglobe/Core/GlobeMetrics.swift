@@ -32,6 +32,8 @@ enum GlobeMetrics {
     static let snowRingRadius: Float = 0.912
     /// Snow flakes are kept inside this radius (glass thickness + flake size).
     static let snowContainmentRadius: Float = 0.955
+    /// Y of the top of the snowy ground disk (1 cm above the pedestal top); flakes rest here where nothing stands.
+    static let snowGroundTopY: Float = groundY + 0.01
     /// Pedestal: an octagonal prism from `groundY` down to `baseBottomY`, flat face toward +Z.
     /// Circumradius just big enough that its flat faces (apothem ≈ 0.94) cover where the glass meets the wood.
     static let baseRadius: Float = 1.02
@@ -43,8 +45,8 @@ enum GlobeMetrics {
     static let domeClearance: Float = 0.88
     /// Size of the glass radius when the globe is placed in AR (meters) → ~20 cm tall globe.
     static let arGlassRadiusMeters: Float = 0.09
-    /// Default number of snow flakes in a globe.
-    static let snowFlakeCount: Int = 320
+    /// Number of snow flakes in a globe (all drawn as one mesh, see Rendering/Snow).
+    static let snowFlakeCount: Int = 1500
 
     /// RealityKit samples textures made from a CGImage with v = 0 at the BOTTOM row of the image
     /// (USD convention). If ground imagery ever appears mirrored north/south, flip this one flag.
