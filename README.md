@@ -92,7 +92,8 @@ PhotorealDioramaEntity  unlit textured RealityKit models (photos already contain
 GlobeEntityFactory      pedestal + brass plaque + snow + the miniature + glass dome, in an ARView
 ```
 
-Built miniatures stay in memory for the app session only: Google's terms don't allow storing tiles long-term.
+Each globe's tiles are saved on the device after the first download (`TileStore`, in Application Support), so a globe downloads once and then opens offline.
+Heads-up: Google's Map Tiles API policies only allow keeping tiles for their Cache-Control lifetime (a few hours). Keeping them is fine for a private prototype; set `TileStore.keepTilesForever = false` before any public release.
 If loading fails (no key, offline), a little procedural village appears instead, with a Try Again button.
 
 All globe geometry uses **globe units**: the glass sphere has radius 1, the pedestal top is at `y = -0.40`, `+X` = east, `-Z` = north. The whole globe is scaled to ~16 cm tall in AR. See `Snowglobe/Core/GlobeMetrics.swift`.

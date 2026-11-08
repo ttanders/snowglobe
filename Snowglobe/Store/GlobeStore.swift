@@ -39,6 +39,9 @@ final class GlobeStore {
     }
 
     func delete(id: SnowGlobe.ID) {
+        if let globe = globe(id: id) {
+            TileStore.remove(key: TileStore.key(for: globe)) // its saved 3D tiles
+        }
         globes.removeAll { $0.id == id }
         save()
     }

@@ -2,11 +2,11 @@
 //  PhotorealDioramaLoader.swift
 //  Snowglobe
 //
-//  Downloads Google's Photorealistic 3D Tiles around a globe's location and turns them into the
-//  miniature shown inside the glass, reporting progress for the UI.
-//
-//  Built miniatures are kept in memory for this app session only: Google's terms don't allow
-//  storing tiles long-term (beyond their Cache-Control lifetime, which URLCache already honours).
+//  Gets the real place for a globe and turns it into the miniature shown inside the glass,
+//  reporting progress for the UI:
+//    1. built this app session?       → reuse it (instant)
+//    2. tiles saved on the device?     → build from them (no network, ~1-2 s) — see TileStore
+//    3. otherwise                      → download Google's Photorealistic 3D Tiles, then save them
 //
 
 import Foundation
@@ -28,13 +28,14 @@ final class PhotorealDioramaLoader {
     /// Data credits that must stay visible while the miniature is on screen (Google first).
     private(set) var attributions: [String] = []
 
-    private static var cache: [String: (entity: Entity, attributions: [String])] = [:]
-    private static var cacheOrder: [String] = []
-    private static let cacheLimit = 4
+    /// Miniatures built during this app session (shared by every loader).
+    private static var built: [String: (entity: Entity, attributions: [String])] = [:]
+    private static var builtOrder: [String] = []
+    private static let builtLimit = 4
 
     func load(_ globe: SnowGlobe) async {
-        let key = "\(globe.coordinate.latitude),\(globe.coordinate.longitude),\(globe.radiusMeters)"
-        if let cached = Self.cache[key] {
+        let key = TileStore.key(for: globe)
+        if let cached = Self.built[key] {
             content = cached.entity.clone(recursive: true)
             attributions = cached.attributions
             phase = .ready
@@ -42,26 +43,12 @@ final class PhotorealDioramaLoader {
         }
 
         do {
-            phase = .loading(message: "Finding Google's 3D tiles…", progress: 0.05)
-            let client = GoogleTilesClient.shared
-            _ = try await client.root() // reuses the saved session when it's still valid
-            let urls: [URL]
-            if let saved = await client.savedSelection(for: key) {
-                urls = saved
+            phase = .loading(message: "Opening your miniature…", progress: 0.05)
+            let tiles: [ParsedTile]
+            if let saved = await Task.detached(priority: .userInitiated, operation: { TileStore.load(key: key) }).value {
+                tiles = saved
             } else {
-                let selector = TileSelector(client: client, center: globe.coordinate, radiusMeters: globe.radiusMeters)
-                urls = try await selector.select()
-                await client.saveSelection(urls, for: key)
-            }
-            guard !urls.isEmpty else { throw GoogleTilesError.nothingHere }
-
-            phase = .loading(message: "Downloading \(urls.count) tiles…", progress: 0.15)
-            let tiles = try await TileDownloader.download(urls) { [weak self] done, total in
-                Task { @MainActor in
-                    guard let self, case .loading = self.phase else { return }
-                    self.phase = .loading(message: "Downloading tiles \(done)/\(total)…",
-                                          progress: 0.15 + 0.7 * Double(done) / Double(max(total, 1)))
-                }
+                tiles = try await download(globe, key: key)
             }
 
             phase = .loading(message: "Building your miniature…", progress: 0.9)
@@ -89,31 +76,70 @@ final class PhotorealDioramaLoader {
         }
     }
 
+    /// Downloads the globe's tiles from Google and saves them on the device for next time.
+    private func download(_ globe: SnowGlobe, key: String) async throws -> [ParsedTile] {
+        phase = .loading(message: "Finding Google's 3D tiles…", progress: 0.05)
+        let client = GoogleTilesClient.shared
+        _ = try await client.root() // reuses the current session when it's still valid
+        let urls: [URL]
+        if let saved = await client.savedSelection(for: key) {
+            urls = saved
+        } else {
+            let selector = TileSelector(client: client, center: globe.coordinate, radiusMeters: globe.radiusMeters)
+            urls = try await selector.select()
+            await client.saveSelection(urls, for: key)
+        }
+        guard !urls.isEmpty else { throw GoogleTilesError.nothingHere }
+
+        phase = .loading(message: "Downloading \(urls.count) tiles…", progress: 0.15)
+        let downloaded = try await TileDownloader.download(urls) { [weak self] done, total in
+            Task { @MainActor in
+                guard let self, case .loading = self.phase else { return }
+                self.phase = .loading(message: "Downloading tiles \(done)/\(total)…",
+                                      progress: 0.15 + 0.7 * Double(done) / Double(max(total, 1)))
+            }
+        }
+
+        let rawTiles = downloaded.map(\.data)
+        Task.detached(priority: .utility) { TileStore.save(rawTiles, key: key) }
+        return downloaded.map(\.tile)
+    }
+
     private func remember(_ entity: Entity, attributions: [String], key: String) {
-        Self.cache[key] = (entity, attributions)
-        Self.cacheOrder.removeAll { $0 == key }
-        Self.cacheOrder.append(key)
-        while Self.cacheOrder.count > Self.cacheLimit {
-            Self.cache[Self.cacheOrder.removeFirst()] = nil
+        Self.built[key] = (entity, attributions)
+        Self.builtOrder.removeAll { $0 == key }
+        Self.builtOrder.append(key)
+        while Self.builtOrder.count > Self.builtLimit {
+            Self.built[Self.builtOrder.removeFirst()] = nil
         }
     }
+}
+
+/// A downloaded tile: the raw .glb (to save on the device) and its parsed contents.
+struct DownloadedTile: Sendable {
+    let data: Data
+    let tile: ParsedTile
 }
 
 /// Downloads and parses tiles, several at a time.
 enum TileDownloader {
     static let maxConcurrent = 8
 
-    static func download(_ urls: [URL], progress: @escaping @Sendable (Int, Int) -> Void) async throws -> [ParsedTile] {
-        try await withThrowingTaskGroup(of: Result<ParsedTile, Error>.self) { group in
+    static func download(_ urls: [URL], progress: @escaping @Sendable (Int, Int) -> Void) async throws -> [DownloadedTile] {
+        try await withThrowingTaskGroup(of: Result<DownloadedTile, Error>.self) { group in
             var next = 0
             var finished = 0
-            var tiles: [ParsedTile] = []
+            var tiles: [DownloadedTile] = []
             var lastError: Error?
 
             func enqueue(_ url: URL) {
                 group.addTask {
-                    do { return .success(try GLBParser.parse(try await GoogleTilesClient.shared.tileData(at: url))) }
-                    catch { return .failure(error) }
+                    do {
+                        let data = try await GoogleTilesClient.shared.tileData(at: url)
+                        return .success(DownloadedTile(data: data, tile: try GLBParser.parse(data)))
+                    } catch {
+                        return .failure(error)
+                    }
                 }
             }
 
