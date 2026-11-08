@@ -12,6 +12,8 @@ import Combine
 
 struct GlobeSceneView: UIViewRepresentable {
     let globe: SnowGlobe
+    /// What stands inside the glass (nil = just snow while it loads).
+    var dioramaContent: Entity?
 
     func makeCoordinator() -> GlobeSceneCoordinator {
         GlobeSceneCoordinator()
@@ -20,10 +22,13 @@ struct GlobeSceneView: UIViewRepresentable {
     func makeUIView(context: Context) -> ARView {
         let arView = ARView(frame: .zero, cameraMode: .nonAR, automaticallyConfigureSession: false)
         context.coordinator.attach(to: arView, globe: GlobeEntityFactory.makeGlobe(for: globe))
+        context.coordinator.showDioramaContent(dioramaContent)
         return arView
     }
 
-    func updateUIView(_ uiView: ARView, context: Context) {}
+    func updateUIView(_ uiView: ARView, context: Context) {
+        context.coordinator.showDioramaContent(dioramaContent)
+    }
 
     static func dismantleUIView(_ uiView: ARView, coordinator: GlobeSceneCoordinator) {
         coordinator.detach()
@@ -97,6 +102,15 @@ final class GlobeSceneCoordinator: NSObject {
         updateSubscription?.cancel()
         updateSubscription = nil
         arView?.scene.removeAnchor(anchor)
+    }
+
+    private var shownContent: ObjectIdentifier?
+
+    /// Puts `content` on the snow inside the globe (no-op if it's already there).
+    func showDioramaContent(_ content: Entity?) {
+        guard let globe, let content, ObjectIdentifier(content) != shownContent else { return }
+        shownContent = ObjectIdentifier(content)
+        GlobeEntityFactory.setDioramaContent(content, in: globe)
     }
 
     // MARK: - Gestures

@@ -14,17 +14,33 @@ import UIKit
 
 @MainActor
 enum GlobeEntityFactory {
-    static func makeGlobe(for globe: SnowGlobe) -> Entity {
+    /// Name of the swappable entity standing on the snow (the real place, or the placeholder village).
+    static let dioramaContentName = "DioramaContent"
+
+    /// - Parameter content: what stands inside the glass; nil = just snow (e.g. while the real place downloads).
+    static func makeGlobe(for globe: SnowGlobe, content: Entity? = nil) -> Entity {
         let root = Entity()
         root.name = "SnowGlobe"
         root.addChild(makePedestal(title: globe.title))
 
-        let diorama = makePlaceholderDiorama(for: globe)
+        let diorama = Entity()
         diorama.name = "Diorama"
+        diorama.addChild(makeSnowGround())
         root.addChild(diorama)
+        if let content { setDioramaContent(content, in: root) }
 
         root.addChild(makeGlass())
         return root
+    }
+
+    /// Replaces whatever stands on the snow inside `globe`.
+    static func setDioramaContent(_ content: Entity, in globe: Entity) {
+        guard let diorama = globe.findEntity(named: "Diorama") else { return }
+        for old in diorama.children.filter({ $0.name == dioramaContentName }) {
+            old.removeFromParent()
+        }
+        content.name = dioramaContentName
+        diorama.addChild(content)
     }
 
     /// Y of the snowy ground's top surface (1 cm above the pedestal top).
@@ -80,14 +96,19 @@ enum GlobeEntityFactory {
 
     // MARK: - Miniature
 
-    private static func makePlaceholderDiorama(for globe: SnowGlobe) -> Entity {
-        let diorama = Entity()
-
-        // Snowy ground disk filling the glass; its top is at `surfaceY`.
+    /// Snowy ground disk filling the glass; its top is at `surfaceY`.
+    private static func makeSnowGround() -> ModelEntity {
         let ground = ModelEntity(mesh: .generateCylinder(height: 0.04, radius: GlobeMetrics.snowRingRadius),
                                  materials: [GlobeMaterials.snow])
+        ground.name = "SnowGround"
         ground.position.y = surfaceY - 0.02
-        diorama.addChild(ground)
+        return ground
+    }
+
+    /// A little procedural village (seeded by the coordinate), used when the real place can't be loaded.
+    static func makePlaceholderVillage(for globe: SnowGlobe) -> Entity {
+        let diorama = Entity()
+        diorama.name = dioramaContentName
 
         var rng = SeededRandom(coordinate: globe.coordinate)
         var occupied: [(center: SIMD2<Float>, radius: Float)] = []

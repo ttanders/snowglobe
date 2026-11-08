@@ -6,3 +6,6 @@ xcuserdata/
 *.xcscmblueprint
 *.xccheckout
 .DS_Store
+
+# Secrets: never commit API keys. Copy Secrets.example.plist to Snowglobe/Secrets.plist instead.
+Snowglobe/Secrets.plist
