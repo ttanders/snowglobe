@@ -332,6 +332,11 @@ function clipToGlobe(material) {
 
 let tiles = null;
 const diorama = new THREE.Group();   // scales and lifts the real place into the globe
+// The tiles arrive at sea level, i.e. floating mid-glass. Start them at the snow (about right for
+// low-lying places) and keep them hidden until the ground has been measured and they're lowered onto
+// it. Measuring still works while hidden: raycasts don't skip invisible objects.
+diorama.position.y = METRICS.groundY;
+diorama.visible = false;
 globeRoot.add(diorama);
 
 /// Data credits for the tiles on screen. Google requires them to stay visible with its content, so
@@ -394,6 +399,7 @@ function fitGround() {
     fitAttempts++;
     const shift = METRICS.groundY + 0.004 - lowest;
     diorama.position.y += shift;
+    diorama.visible = true;        // standing on the snow now
     // Sharper tiles keep nudging the ground a little; close enough (or enough tries) counts as fitted.
     if (!fitted && (Math.abs(shift) < 0.01 || fitAttempts >= 6)) {
         fitted = true;            // from now on the far plane hugs the globe (see the render loop)
