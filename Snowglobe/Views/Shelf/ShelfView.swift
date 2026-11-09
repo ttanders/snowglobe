@@ -5,19 +5,37 @@
 //  A page of snowglobes standing on frosted shelves, two per shelf.
 //  Used for both the Home tab (every globe) and the Favorites tab.
 //
-//  Edit mode works like the iPhone home screen: hold a globe and pick "Edit Shelf" and the
-//  globes start to wiggle, each gets an X to delete it, and you can drag them into a new order.
-//  Tap Done (or an empty part of the shelf) to stop. Tapping a globe while editing renames it.
+//  Edit mode works like the iPhone home screen: hold a globe and the globes start to wiggle,
+//  each gets an X to delete it, and you can drag them into a new order (keep holding to move the
+//  one under your finger straight away). Tap Done (or an empty part of the shelf) to stop.
+//  Tapping a globe while editing renames it.
+//
+//  The sort menu at the top orders the shelf by name or date; dragging a globe while sorted
+//  keeps the sorted order as your own and switches back to Custom.
 //
 
 import PhotosUI
 import SwiftUI
 
 struct ShelfView: View {
-    var title = "Snowglobes"
-    var subtitle = "Places you've been, under glass"
+    let title: String
+    let subtitle: String
     /// When true, only favorited globes are shown.
-    var favoritesOnly = false
+    let favoritesOnly: Bool
+
+    /// Remembered separately for each page (see `init`).
+    @AppStorage private var sort: ShelfSort
+    @AppStorage private var sortAscending: Bool
+
+    init(title: String = "Snowglobes", subtitle: String = "Places you've been, under glass",
+         favoritesOnly: Bool = false) {
+        self.title = title
+        self.subtitle = subtitle
+        self.favoritesOnly = favoritesOnly
+        let page = favoritesOnly ? "favorites" : "home"
+        _sort = AppStorage(wrappedValue: .custom, "shelf.\(page).sort")
+        _sortAscending = AppStorage(wrappedValue: true, "shelf.\(page).sortAscending")
+    }
 
     @Environment(GlobeStore.self) private var store
     @Environment(GlobeThumbnailStore.self) private var thumbnails
@@ -76,7 +94,7 @@ struct ShelfView: View {
                 .overlay(alignment: .topLeading) { draggedGlobe }
                 // Lives on the whole page (not on one globe) so it keeps tracking the finger
                 // even when the dragged globe hops to another shelf.
-                .simultaneousGesture(rearrangeGesture, including: isEditing ? .all : .subviews)
+                .gesture(holdAndDrag)
             }
             .scrollDisabled(drag != nil)
             .background {
@@ -93,11 +111,17 @@ struct ShelfView: View {
             .alert("Rename Snowglobe", isPresented: isRenaming) {
                 TextField("Name", text: $renameText)
                 Button("Save") {
-                    if let target = renameTarget { store.rename(id: target.id, to: renameText) }
+                    // Animated so a renamed globe glides to its new spot when sorted by name.
+                    if let target = renameTarget {
+                        withAnimation(.snappy) { store.rename(id: target.id, to: renameText) }
+                    }
                 }
                 Button("Cancel", role: .cancel) {}
             }
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    sortMenu
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     // `.current` hands over the original file so its location and date metadata survive.
                     PhotosPicker(selection: $importedPhoto, matching: .images, preferredItemEncoding: .current) {
@@ -121,8 +145,8 @@ struct ShelfView: View {
             }
             .sensoryFeedback(.impact(weight: .medium), trigger: isEditing) { _, editing in editing }
             .sensoryFeedback(.selection, trigger: store.globes.map(\.id))
+            .sensoryFeedback(.selection, trigger: sort)
             // Picking a globe up in edit mode gets the same firm tap as holding an app icon.
-            // (Outside edit mode the hold menu already plays the system haptic, so none is added there.)
             .sensoryFeedback(.impact(weight: .medium), trigger: drag?.id) { old, new in old == nil && new != nil }
         }
     }
@@ -155,6 +179,49 @@ struct ShelfView: View {
         .padding(.top, 12)
     }
 
+    /// Sort By (Custom, Name, Date Taken, Date Added) and, for all but Custom, which way round.
+    private var sortMenu: some View {
+        Menu {
+            Section("Sort By") {
+                Picker("Sort By", selection: sortSelection) {
+                    ForEach(ShelfSort.allCases) { option in
+                        Label(option.title, systemImage: option.systemImage).tag(option)
+                    }
+                }
+                .pickerStyle(.inline)
+            }
+            if sort.hasDirection {
+                Section {
+                    Picker("Order", selection: directionSelection) {
+                        Text(sort.ascendingTitle).tag(true)
+                        Text(sort.descendingTitle).tag(false)
+                    }
+                    .pickerStyle(.inline)
+                }
+            }
+        } label: {
+            Label("Sort", systemImage: "arrow.up.arrow.down")
+        }
+        .accessibilityValue(sort.title)
+    }
+
+    /// Picking a sort also resets its direction to the natural one (names A–Z, dates newest first).
+    private var sortSelection: Binding<ShelfSort> {
+        Binding(get: { sort }, set: { newSort in
+            guard newSort != sort else { return }
+            withAnimation(.snappy) {
+                sort = newSort
+                sortAscending = newSort.startsAscending
+            }
+        })
+    }
+
+    private var directionSelection: Binding<Bool> {
+        Binding(get: { sortAscending }, set: { ascending in
+            withAnimation(.snappy) { sortAscending = ascending }
+        })
+    }
+
     private var emptyFavoritesHint: some View {
         Label("Double-tap a snowglobe on Home to add it here", systemImage: "heart")
             .font(Theme.font(.footnote, weight: .medium))
@@ -182,8 +249,10 @@ struct ShelfView: View {
         }
     }
 
+    /// The globes on this page, in the order they stand on the shelves.
     private var visibleGlobes: [SnowGlobe] {
-        favoritesOnly ? store.globes.filter(\.isFavorite) : store.globes
+        let globes = favoritesOnly ? store.globes.filter(\.isFavorite) : store.globes
+        return sort.apply(to: globes, ascending: sortAscending)
     }
 
     /// Globes chunked into shelves; always at least two shelves so an empty shelf still looks like one.
@@ -242,24 +311,11 @@ struct ShelfView: View {
         .matchedGeometryEffect(id: globe.id, in: shelfNamespace)
         .matchedTransitionSource(id: globe.id, in: zoomNamespace)
         .frame(maxWidth: .infinity)
-        // The hold menu is switched off while editing: even an empty menu still grabs the
-        // touch, which would stop globes from being dragged.
-        .modifier(MenuUnlessEditing(isEditing: isEditing) {
-            Button("Edit Shelf", systemImage: "square.grid.2x2") { startEditing() }
-            Divider()
-            Button(globe.isFavorite ? "Unfavorite" : "Favorite",
-                   systemImage: globe.isFavorite ? "heart.slash" : "heart") {
-                store.toggleFavorite(id: globe.id)
-            }
-            Button("Rename", systemImage: "pencil") {
-                renameText = globe.title
-                renameTarget = globe
-            }
-            Button("Delete", systemImage: "trash", role: .destructive) {
-                store.delete(id: globe.id)
-            }
-        })
+        // Holding a globe starts edit mode instead of opening a menu, so these stand in for
+        // that menu with VoiceOver.
         .accessibilityAction(named: "Edit Shelf") { startEditing() }
+        .accessibilityAction(named: "Rename") { startRename(globe) }
+        .accessibilityAction(named: "Delete") { deleteTarget = globe }
     }
 
     // MARK: - Edit mode
@@ -310,34 +366,46 @@ struct ShelfView: View {
         }
     }
 
-    /// While editing: hold a globe briefly, then drag it. A quick swipe still scrolls the page.
-    private var rearrangeGesture: some Gesture {
-        LongPressGesture(minimumDuration: 0.15)
-            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
-            .onChanged { value in
-                guard isEditing, case .second(true, let dragValue?) = value else { return }
-                dragChanged(start: dragValue.startLocation, location: dragValue.location)
-            }
-            .onEnded { _ in dragEnded() }
+    /// Hold a globe to lift it, then drag it. Outside edit mode the hold is longer and starts
+    /// editing too, so one touch can go straight from holding into moving the globe.
+    private var holdAndDrag: HoldAndDragGesture {
+        HoldAndDragGesture(
+            minimumDuration: isEditing ? 0.2 : 0.4,
+            canBegin: { globe(at: $0) != nil },
+            onChanged: { location in
+                if !isEditing { startEditing() }
+                dragChanged(to: location)
+            },
+            onEnded: { dragEnded() }
+        )
     }
 
-    private func dragChanged(start: CGPoint, location: CGPoint) {
+    /// The globe under a point in screen coordinates.
+    private func globe(at point: CGPoint) -> SnowGlobe.ID? {
+        visibleGlobes.first { globeFrames[$0.id]?.contains(point) == true }?.id
+    }
+
+    private func dragChanged(to location: CGPoint) {
         if drag == nil || drag?.isSettling == true {
-            // Pick up whichever globe the finger started on.
-            guard let id = visibleGlobes.first(where: { globeFrames[$0.id]?.contains(start) == true })?.id,
-                  let frame = globeFrames[id] else { return }
+            // Pick up whichever globe is under the finger.
+            guard let id = globe(at: location), let frame = globeFrames[id] else { return }
             drag = DragState(id: id, location: location,
-                             grabOffset: CGSize(width: start.x - frame.minX, height: start.y - frame.minY))
+                             grabOffset: CGSize(width: location.x - frame.minX, height: location.y - frame.minY))
         }
         guard let current = drag else { return }
         drag?.location = location
 
         // Finger over another globe → take its spot; the others slide over to make room.
-        // (Indexes are in the full list, so this also works on the Favorites tab.)
         guard let target = visibleGlobes.first(where: {
                   $0.id != current.id && globeFrames[$0.id]?.contains(location) == true
-              }),
-              let targetIndex = store.globes.firstIndex(where: { $0.id == target.id }) else { return }
+              }) else { return }
+        // Moving a globe on a sorted shelf makes the order on screen your own, so nothing jumps.
+        if sort != .custom {
+            store.reorder(visibleGlobes.map(\.id))
+            sort = .custom
+        }
+        // (Indexes are in the full list, so this also works on the Favorites tab.)
+        guard let targetIndex = store.globes.firstIndex(where: { $0.id == target.id }) else { return }
         withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
             store.move(id: current.id, to: targetIndex)
         }
@@ -395,20 +463,6 @@ struct ShelfView: View {
     }
 }
 
-/// Attaches a context menu only when the shelf isn't in edit mode.
-private struct MenuUnlessEditing<MenuItems: View>: ViewModifier {
-    let isEditing: Bool
-    @ViewBuilder let menuItems: () -> MenuItems
-
-    func body(content: Content) -> some View {
-        if isEditing {
-            content
-        } else {
-            content.contextMenu { menuItems() }
-        }
-    }
-}
-
 /// The home-screen jiggle: a quick back-and-forth tilt. Neighbouring globes start in opposite
 /// directions so the shelf doesn't sway in lockstep.
 private struct Wiggle: ViewModifier {
@@ -429,7 +483,55 @@ private struct Wiggle: ViewModifier {
     }
 }
 
+/// Hold-then-drag, as a UIKit long press. A SwiftUI long-press-then-drag gesture on the page
+/// stops it scrolling altogether; this one gives way to the scroll if the finger moves before the
+/// hold completes, and only starts on a globe (`canBegin`), so holding a gap and dragging still scrolls.
+/// Locations are in SwiftUI's global (screen) coordinates, the same as the globe frames.
+private struct HoldAndDragGesture: UIGestureRecognizerRepresentable {
+    let minimumDuration: TimeInterval
+    let canBegin: (CGPoint) -> Bool
+    let onChanged: (CGPoint) -> Void
+    let onEnded: () -> Void
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
+        Coordinator(converter: converter)
+    }
+
+    func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
+        let recognizer = UILongPressGestureRecognizer()
+        recognizer.delegate = context.coordinator
+        return recognizer
+    }
+
+    func updateUIGestureRecognizer(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        recognizer.minimumPressDuration = minimumDuration
+        context.coordinator.canBegin = canBegin
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        switch recognizer.state {
+        case .began, .changed: onChanged(context.converter.location(in: .global))
+        case .ended, .cancelled, .failed: onEnded()
+        default: break
+        }
+    }
+
+    @MainActor final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        let converter: CoordinateSpaceConverter
+        var canBegin: (CGPoint) -> Bool = { _ in false }
+
+        init(converter: CoordinateSpaceConverter) {
+            self.converter = converter
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            canBegin(converter.location(in: .global))
+        }
+    }
+}
+
 /// One globe on the shelf. Tap opens it; double-tap toggles favorite with a heart pop.
+/// (Holding it is handled by the page; see `HoldAndDragGesture`.)
 private struct GlobeTile: View {
     let globe: SnowGlobe
     /// Picture of the real 3D globe; until it's ready, an outline of a globe stands in.
