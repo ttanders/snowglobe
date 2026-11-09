@@ -66,8 +66,25 @@ final class GlobeStore {
     func move(id: SnowGlobe.ID, to newIndex: Int) {
         guard let oldIndex = globes.firstIndex(where: { $0.id == id }), oldIndex != newIndex,
               globes.indices.contains(newIndex) else { return }
-        let globe = globes.remove(at: oldIndex)
-        globes.insert(globe, at: newIndex)
+        // Rearranged in a copy and stored in one go: anything watching `globes` must never see
+        // the in-between list without this globe (the shelf pictures would drop it as deleted).
+        var reordered = globes
+        reordered.insert(reordered.remove(at: oldIndex), at: newIndex)
+        globes = reordered
+        save()
+    }
+
+    /// Puts the listed globes in the given order, in the shelf slots they already fill; globes
+    /// not listed stay where they are. Used to keep a sorted shelf's order as the custom order.
+    func reorder(_ ids: [SnowGlobe.ID]) {
+        let listed = Set(ids)
+        let slots = globes.indices.filter { listed.contains(globes[$0].id) }
+        let byID = Dictionary(globes.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let ordered = ids.compactMap { byID[$0] }
+        guard ordered.count == slots.count else { return }
+        var reordered = globes // stored in one go, as in `move`
+        for (slot, globe) in zip(slots, ordered) { reordered[slot] = globe }
+        globes = reordered
         save()
     }
 
