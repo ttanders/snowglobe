@@ -13,13 +13,24 @@ import RealityKit
 import Combine
 
 struct GlobeSceneView: UIViewRepresentable {
+    /// How the user stirred the snow themselves.
+    enum Stir {
+        /// Shook the iPhone (Device ▸ Shake in the Simulator).
+        case shake
+        /// Tapped the glass or the base.
+        case tap
+    }
+
     let globe: SnowGlobe
     /// What stands inside the glass (nil = just snow while it loads).
     var dioramaContent: Entity?
     /// Bump this to make the globe hop and rattle (the Shake button).
     var shakeRequests = 0
-    /// Called when the user stirs the snow themselves: shakes the iPhone, or taps the globe.
-    var onUserStir: () -> Void = {}
+    /// True while something covers the globe (GlobeDetailView's Shake to Reveal). Uncovering it throws
+    /// all the snow up, so the globe appears in a snowstorm however gently it was shaken.
+    var isCovered = false
+    /// Called each time the user stirs the snow themselves: shakes the iPhone, or taps the globe.
+    var onUserStir: (Stir) -> Void = { _ in }
 
     func makeCoordinator() -> GlobeSceneCoordinator {
         GlobeSceneCoordinator()
@@ -32,6 +43,7 @@ struct GlobeSceneView: UIViewRepresentable {
         coordinator.handledShakeRequests = shakeRequests
         coordinator.attach(to: arView, globe: GlobeEntityFactory.makeGlobe(for: globe))
         coordinator.showDioramaContent(dioramaContent)
+        coordinator.isCovered = isCovered
         return arView
     }
 
@@ -39,6 +51,7 @@ struct GlobeSceneView: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.onUserStir = onUserStir
         coordinator.showDioramaContent(dioramaContent)
+        coordinator.isCovered = isCovered
         if shakeRequests != coordinator.handledShakeRequests {
             coordinator.handledShakeRequests = shakeRequests
             coordinator.shakeGlobe()
@@ -116,7 +129,20 @@ final class GlobeSceneCoordinator: NSObject, UIGestureRecognizerDelegate {
 
     /// The Shake button presses already acted on (see GlobeSceneView.shakeRequests).
     var handledShakeRequests = 0
-    var onUserStir: (() -> Void)?
+    var onUserStir: ((GlobeSceneView.Stir) -> Void)?
+
+    /// See GlobeSceneView.isCovered.
+    var isCovered = false {
+        didSet {
+            guard isCovered != oldValue else { return }
+            if isCovered {
+                // The Simulator's shake gesture only reaches the first responder; make sure it's still us.
+                arView?.becomeFirstResponder()
+            } else {
+                snow?.shake()
+            }
+        }
+    }
 
     /// The globe currently on the turntable.
     private(set) var globe: Entity?
@@ -141,7 +167,7 @@ final class GlobeSceneCoordinator: NSObject, UIGestureRecognizerDelegate {
         // Opening a globe is like picking it up off the shelf: the snow is drifting down.
         let snow = SnowController(globe: globe, startsSnowing: !UIAccessibility.isReduceMotionEnabled)
         snow.followDeviceMotion(true)
-        snow.onDeliberateShake = { [weak self] in self?.onUserStir?() }
+        snow.onDeliberateShake = { [weak self] in self?.onUserStir?(.shake) }
         self.snow = snow
         arView.onShakeGesture = { [weak self] in self?.handleShakeGesture() }
 
@@ -201,7 +227,7 @@ final class GlobeSceneCoordinator: NSObject, UIGestureRecognizerDelegate {
     private func handleShakeGesture() {
         guard !DeviceMotion.shared.isAvailable else { return }
         shakeGlobe()
-        onUserStir?()
+        onUserStir?(.shake)
     }
 
     // MARK: - Gestures
@@ -245,7 +271,7 @@ final class GlobeSceneCoordinator: NSObject, UIGestureRecognizerDelegate {
               let ray = arView.ray(through: gesture.location(in: arView)),
               let target = snow.tap(rayOrigin: ray.origin, direction: ray.direction) else { return }
         tapFeedback.impactOccurred(intensity: target == .glass ? 0.6 : 0.9)
-        onUserStir?()
+        onUserStir?(.tap)
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,

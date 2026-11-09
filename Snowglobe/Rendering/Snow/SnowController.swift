@@ -23,6 +23,8 @@ final class SnowController {
         static let deviceTwistStillness: Float = 0.25
         /// Phone acceleration (g) that counts as a deliberate shake.
         static let deliberateShake: Float = 0.8
+        /// A new deliberate shake starts once the phone has been calmer than that for this long (seconds).
+        static let shakePause: Float = 0.6
         /// Seconds over which the iPhone's sense of down is smoothed.
         static let gravitySmoothing: Float = 0.12
         /// Below this much gravity across the screen (g) the phone is lying nearly flat, and which way is
@@ -40,7 +42,8 @@ final class SnowController {
     private var tracker = GlassMotionTracker()
     private var followsDevice = false
     private var deviceSpin: Float = 0
-    private var reportedDeliberateShake = false
+    /// Seconds since the iPhone last moved like a deliberate shake.
+    private var timeSinceShake: Float = .infinity
     private var lastView: SnowView?
     private var needsDraw = true
     /// The iPhone's gravity across the screen (x right, y up), smoothed; nil until it's been read.
@@ -48,7 +51,7 @@ final class SnowController {
     /// Down for the snow in world axes, as last worked out from the iPhone.
     private var deviceDown = SIMD3<Float>(0, -1, 0)
 
-    /// Called once, the first time the user deliberately shakes the iPhone.
+    /// Called each time the user deliberately shakes the iPhone (once per shake, as it starts).
     var onDeliberateShake: (() -> Void)?
 
     /// Adds snow to `globe` (a GlobeEntityFactory globe). `startsSnowing`: drifting down, as if the
@@ -77,6 +80,7 @@ final class SnowController {
         } else {
             DeviceMotion.shared.stop()
             deviceSpin = 0
+            timeSinceShake = .infinity
             screenGravity = nil
             deviceDown = SIMD3(0, -1, 0)
         }
@@ -163,9 +167,11 @@ final class SnowController {
         }
         var acceleration = sample.acceleration
         let strength = simd_length(acceleration)
-        if strength > Tuning.deliberateShake, !reportedDeliberateShake {
-            reportedDeliberateShake = true
-            onDeliberateShake?()
+        if strength > Tuning.deliberateShake {
+            if timeSinceShake > Tuning.shakePause { onDeliberateShake?() }
+            timeSinceShake = 0
+        } else {
+            timeSinceShake += dt
         }
         var velocityChange = SIMD3<Float>.zero
         if strength > Tuning.deviceStillness {
