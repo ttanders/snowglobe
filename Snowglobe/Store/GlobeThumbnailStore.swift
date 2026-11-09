@@ -6,7 +6,7 @@
 //
 //  Kept in memory only: the pictures are made from Google's Photorealistic 3D Tiles, and
 //  Google's terms don't allow storing that content long-term. So they're re-rendered each launch,
-//  and the drawn globe (GlobeIllustration) shows until a picture is ready.
+//  and a pulsing outline of a globe (GlobeOutlinePlaceholder) shows until a picture is ready.
 //
 
 import Foundation
@@ -19,12 +19,19 @@ final class GlobeThumbnailStore {
     /// Data credits for the pictures on screen; Google requires these to stay visible with its content.
     private(set) var attributions: [String] = []
 
-    /// Globes already rendered or attempted this session (failures fall back to the drawing).
+    /// Globes already rendered or attempted this session.
     private var attempted: Set<SnowGlobe.ID> = []
+    /// Globes whose picture couldn't be made this session (their outline stops pulsing).
+    private(set) var failed: Set<SnowGlobe.ID> = []
     private var attributionsByGlobe: [SnowGlobe.ID: [String]] = [:]
 
     func image(for id: SnowGlobe.ID) -> UIImage? {
         images[id]
+    }
+
+    /// True until the globe's picture is ready or has failed.
+    func isLoading(_ id: SnowGlobe.ID) -> Bool {
+        images[id] == nil && !failed.contains(id)
     }
 
     /// Renders every globe that doesn't have a picture yet, one at a time to keep network and GPU load low.
@@ -33,6 +40,7 @@ final class GlobeThumbnailStore {
         let ids = Set(globes.map(\.id))
         images = images.filter { ids.contains($0.key) }
         attributionsByGlobe = attributionsByGlobe.filter { ids.contains($0.key) }
+        failed = failed.filter { ids.contains($0) }
         updateAttributions()
 
         for globe in globes where !attempted.contains(globe.id) {
@@ -41,8 +49,11 @@ final class GlobeThumbnailStore {
 
             let loader = PhotorealDioramaLoader()
             await loader.load(globe)
-            // Only real places get a picture; if loading failed, keep the drawing.
-            guard loader.phase == .ready, loader.showsRealPlace, let content = loader.content else { continue }
+            // Only real places get a picture; if loading failed, the outline stays.
+            guard loader.phase == .ready, loader.showsRealPlace, let content = loader.content else {
+                failed.insert(globe.id)
+                continue
+            }
 
             do {
                 let cgImage = try await GlobeThumbnailRenderer.render(globe: globe, content: content)
@@ -51,6 +62,7 @@ final class GlobeThumbnailStore {
                 updateAttributions()
             } catch {
                 print("GlobeThumbnailStore: couldn't render \(globe.title): \(error)")
+                failed.insert(globe.id)
             }
         }
     }

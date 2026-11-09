@@ -221,6 +221,7 @@ struct ShelfView: View {
         GlobeTile(
             globe: globe,
             renderedImage: thumbnails.image(for: globe.id),
+            isLoadingImage: thumbnails.isLoading(globe.id),
             onOpen: { if isEditing { startRename(globe) } else { path.append(globe.id) } },
             onToggleFavorite: { store.toggleFavorite(id: globe.id) }
         )
@@ -294,7 +295,7 @@ struct ShelfView: View {
                         .resizable()
                         .aspectRatio(GlobeIllustration.aspectRatio, contentMode: .fit)
                 } else {
-                    GlobeIllustration(globe: globe)
+                    GlobeOutlinePlaceholder(isLoading: thumbnails.isLoading(globe.id))
                 }
             }
             .frame(width: frame.width, height: frame.height)
@@ -428,8 +429,10 @@ private struct Wiggle: ViewModifier {
 /// One globe on the shelf. Tap opens it; double-tap toggles favorite with a heart pop.
 private struct GlobeTile: View {
     let globe: SnowGlobe
-    /// Picture of the real 3D globe; until it's ready, the drawn globe shows instead.
+    /// Picture of the real 3D globe; until it's ready, an outline of a globe stands in.
     let renderedImage: UIImage?
+    /// While there's no picture: true = still rendering (pulsing outline), false = it failed (still outline).
+    let isLoadingImage: Bool
     let onOpen: () -> Void
     let onToggleFavorite: () -> Void
 
@@ -444,7 +447,7 @@ private struct GlobeTile: View {
                     .aspectRatio(GlobeIllustration.aspectRatio, contentMode: .fit)
                     .transition(.opacity)
             } else {
-                GlobeIllustration(globe: globe)
+                GlobeOutlinePlaceholder(isLoading: isLoadingImage)
                     .transition(.opacity)
             }
         }
