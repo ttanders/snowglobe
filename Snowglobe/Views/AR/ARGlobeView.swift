@@ -26,30 +26,30 @@ struct ARGlobeView: View {
     @State private var controller = ARGlobeController()
 
     var body: some View {
-        ZStack {
-            if ARWorldTrackingConfiguration.isSupported {
-                ARGlobeSceneView(globe: globe, content: content, controller: controller)
-                    .ignoresSafeArea()
-            } else {
-                unsupported
-            }
-
-            VStack(spacing: 12) {
-                HStack {
-                    Button("Close", systemImage: "xmark") { dismiss() }
-                        .labelStyle(.iconOnly)
-                        .font(.title3)
-                        .buttonStyle(.glass)
-                        .buttonBorderShape(.circle)
-                    Spacer()
-                }
-                Spacer()
+        NavigationStack {
+            ZStack {
                 if ARWorldTrackingConfiguration.isSupported {
-                    bottomControls
+                    ARGlobeSceneView(globe: globe, content: content, controller: controller)
+                        .ignoresSafeArea()
+                } else {
+                    unsupported
                 }
-                credits
+
+                VStack(spacing: 12) {
+                    Spacer()
+                    if ARWorldTrackingConfiguration.isSupported {
+                        bottomControls
+                    }
+                    credits
+                }
+                .padding()
             }
-            .padding()
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close) { dismiss() }
+                }
+            }
         }
     }
 
