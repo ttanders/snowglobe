@@ -168,8 +168,9 @@ scene.add(globeRoot);
 const pedestalHeight = METRICS.groundY - METRICS.baseBottomY;
 const pedestal = new THREE.Mesh(
     new THREE.CylinderGeometry(METRICS.baseRadius, METRICS.baseRadius, pedestalHeight, 8),
-    new THREE.MeshPhysicalMaterial({ color: 0x5c3821, roughness: 0.4, clearcoat: 0.7,
-        map: woodTexture("#5c3821", "#2a170b", 512, 128, 11) }),
+    // White, so the colour comes only from the wood texture (tinting it too made it nearly black).
+    new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.45, clearcoat: 0.6,
+        map: woodTexture("#6b4429", "#2a170b", 512, 128, 11) }),
 );
 pedestal.rotation.y = Math.PI / 8;
 pedestal.position.y = (METRICS.groundY + METRICS.baseBottomY) / 2;
