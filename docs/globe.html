@@ -31,11 +31,14 @@
         </header>
 
         <div class="stage">
-            <canvas id="globe" aria-label="3D snowglobe. Drag to spin, pinch or scroll to zoom."></canvas>
+            <canvas id="globe" aria-label="3D snowglobe. Drag to spin, pinch or scroll to zoom, tap the glass to make it snow."></canvas>
             <div class="status glass-pill" id="status">Opening your snowglobe…</div>
         </div>
 
-        <div class="hint glass-pill">Drag to spin · Pinch to zoom · Double-tap to reset</div>
+        <div class="actions">
+            <button id="shake" class="glass-pill shake-button" type="button" aria-describedby="hint">❄︎ Shake</button>
+        </div>
+        <div class="hint glass-pill" id="hint">Drag to spin · Tap the glass or shake your phone to make it snow</div>
 
         <div class="credits" id="credits" hidden></div>
 
