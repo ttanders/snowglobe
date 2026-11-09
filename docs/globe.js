@@ -17,7 +17,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { TilesRenderer } from "3d-tiles-renderer";
 import { GoogleCloudAuthPlugin, ReorientationPlugin, TilesFadePlugin } from "3d-tiles-renderer/plugins";
-import { SnowSimulation, SnowHeightField, GlobeRattle } from "./snow-simulation.js";
+import { SnowSimulation, SnowHeightField, GlobeRattle } from "./snow-simulation.js?v=__BUILD__";
 
 const METRICS = {
     groundY: -0.40,
@@ -334,27 +334,42 @@ let tiles = null;
 const diorama = new THREE.Group();   // scales and lifts the real place into the globe
 globeRoot.add(diorama);
 
+/// Data credits for the tiles on screen. Google requires them to stay visible with its content, so
+/// every credit seen is kept (the set on screen changes as tiles load), refreshed about once a second.
+const seenCredits = new Set();
+let creditsShown = "";
 function updateCredits() {
     if (!tiles) return;
-    const attributions = tiles.getAttributions();
+    let logo = null;
+    for (const item of tiles.getAttributions()) {
+        if (item.type === "image") logo = item.value;
+        else if (item.type === "string" && item.value) {
+            for (const credit of item.value.split(/;\s*/)) {
+                if (credit && credit !== "Google") seenCredits.add(credit.trim());
+            }
+        }
+    }
+    const text = [...seenCredits].join(" · ");
+    if (text === creditsShown && !creditsEl.hidden) return;
+    creditsShown = text;
     creditsEl.replaceChildren();
     const google = document.createElement("strong");
     google.textContent = "Google Maps";
     creditsEl.append(google);
-    for (const item of attributions) {
-        if (item.type === "image") {
-            const img = document.createElement("img");
-            img.src = item.value;
-            img.alt = "Google";
-            creditsEl.append(img);
-        } else if (item.type === "string" && item.value && item.value !== "Google") {
-            const span = document.createElement("span");
-            span.textContent = item.value;
-            creditsEl.append(span);
-        }
+    if (logo) {
+        const img = document.createElement("img");
+        img.src = logo;
+        img.alt = "Google";
+        creditsEl.append(img);
+    }
+    if (text) {
+        const span = document.createElement("span");
+        span.textContent = text;
+        creditsEl.append(span);
     }
     creditsEl.hidden = false;
 }
+setInterval(updateCredits, 1000);
 
 // Lift the place so its streets / valley floor sit on the snow (the tiles start at sea level).
 const raycaster = new THREE.Raycaster();
