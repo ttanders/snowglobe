@@ -101,9 +101,28 @@ a { color: var(--ice); }
     color: rgba(255, 255, 255, 0.8);
 }
 
+.actions {
+    display: flex;
+    justify-content: center;
+    margin-top: 14px;
+}
+
+.shake-button {
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--snow);
+    padding: 12px 24px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.shake-button:active { background: rgba(255, 255, 255, 0.2); }
+
 .hint {
     align-self: center;
-    margin-top: 14px;
+    margin-top: 10px;
+    text-align: center;
 }
 
 .status {
