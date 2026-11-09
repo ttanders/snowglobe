@@ -121,6 +121,9 @@ struct ShelfView: View {
             }
             .sensoryFeedback(.impact(weight: .medium), trigger: isEditing) { _, editing in editing }
             .sensoryFeedback(.selection, trigger: store.globes.map(\.id))
+            // Picking a globe up in edit mode gets the same firm tap as holding an app icon.
+            // (Outside edit mode the hold menu already plays the system haptic, so none is added there.)
+            .sensoryFeedback(.impact(weight: .medium), trigger: drag?.id) { old, new in old == nil && new != nil }
         }
     }
 
