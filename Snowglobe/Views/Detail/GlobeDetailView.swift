@@ -13,12 +13,15 @@ struct GlobeDetailView: View {
 
     @Environment(GlobeStore.self) private var store
     @Environment(GlobeThumbnailStore.self) private var thumbnails
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var loader = PhotorealDioramaLoader()
     @State private var showingAR = false
     /// Size slider position while a new globe's size is being chosen: log2 of the zoom (0 = starting size).
     @State private var zoomLog2: Double = 0
     /// Presses of the Shake button.
     @State private var shakeRequests = 0
+    /// True from Lock In Size until the user shakes the globe: it waits under ShakeToRevealCover.
+    @State private var isCovered = false
     /// Set the first time the user shakes the iPhone or taps a globe; until then the hint teaches it.
     @AppStorage("hasStirredSnow") private var hasStirredSnow = false
 
@@ -29,12 +32,16 @@ struct GlobeDetailView: View {
             if let globe = store.globe(id: globeID) {
                 // Only one 3D view at a time: this one shuts down while AR is open.
                 if !showingAR {
-                    GlobeSceneView(globe: globe, dioramaContent: loader.content, shakeRequests: shakeRequests) {
+                    GlobeSceneView(globe: globe, dioramaContent: loader.content, shakeRequests: shakeRequests,
+                                   isCovered: isCovered) { stir in
+                        if stir == .shake { reveal() }
                         if !hasStirredSnow {
                             withAnimation(.easeInOut) { hasStirredSnow = true }
                         }
                     }
                     .ignoresSafeArea()
+                    .allowsHitTesting(!isCovered)
+                    .accessibilityHidden(isCovered)
                 }
 
                 VStack(spacing: 12) {
@@ -72,14 +79,27 @@ struct GlobeDetailView: View {
                     credits
                 }
                 .padding()
+                .accessibilityHidden(isCovered)
+
+                if isCovered {
+                    ShakeToRevealCover(title: globe.title) {
+                        shakeRequests += 1 // the globe hops and rattles as it's revealed
+                        reveal()
+                    }
+                    .transition(ShakeToRevealTransition(reduceMotion: reduceMotion))
+                    .zIndex(1)
+                }
             } else {
                 ContentUnavailableView("Globe not found", systemImage: "snowflake")
             }
         }
+        .sensoryFeedback(trigger: isCovered) { wasCovered, nowCovered in
+            wasCovered && !nowCovered ? .impact(weight: .heavy) : nil
+        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
-            if let globe = store.globe(id: globeID) {
+            if let globe = store.globe(id: globeID), !isCovered {
                 ToolbarItem(placement: .topBarTrailing) {
                     shareButton(for: globe)
                 }
@@ -206,6 +226,19 @@ struct GlobeDetailView: View {
         }
     }
 
+    /// Lock In Size: fixes the size, then hides the globe until the user shakes it. (Its sharp tiles
+    /// download meanwhile.)
+    private func lockInAndCover(_ globe: SnowGlobe) {
+        lockSize(of: globe)
+        withAnimation(.easeInOut(duration: 0.5)) { isCovered = true }
+    }
+
+    /// Lifts the cover; the scene throws all the snow up as it goes (see GlobeSceneView.isCovered).
+    private func reveal() {
+        guard isCovered else { return }
+        withAnimation(.easeOut(duration: reduceMotion ? 0.3 : 0.7)) { isCovered = false }
+    }
+
     /// Slider that zooms the place inside the glass (more of it, smaller ↔ less of it, bigger)
     /// and a button that locks that size in for good.
     private func sizeChooser(for globe: SnowGlobe) -> some View {
@@ -246,7 +279,7 @@ struct GlobeDetailView: View {
                 .accessibilityHidden(true)
                 Spacer(minLength: 0)
                 Button {
-                    lockSize(of: globe)
+                    lockInAndCover(globe)
                 } label: {
                     Label("Lock In Size", systemImage: "lock.fill")
                         .font(.subheadline.weight(.semibold))
