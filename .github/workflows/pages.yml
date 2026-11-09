@@ -47,6 +47,11 @@ jobs:
             exit 1
           fi
 
+      - name: Stamp this release on script and style links
+        # Pages lets browsers keep files for 10 minutes; a new ?v= per release makes them fetch
+        # matching files instead of mixing a new page with old scripts.
+        run: sed -i "s/__BUILD__/${GITHUB_SHA::8}/g" docs/*.html docs/*.js
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
