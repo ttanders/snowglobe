@@ -121,10 +121,7 @@ if (globe.subtitle) {
 
 const hasPlace = Number.isFinite(globe.lat) && Number.isFinite(globe.lon)
     && Math.abs(globe.lat) <= 90 && Math.abs(globe.lon) <= 180;
-if (hasPlace) {
-    const fmt = (v, pos, neg) => `${Math.abs(v).toFixed(4)}° ${v >= 0 ? pos : neg}`;
-    document.getElementById("coordinates").textContent = `${fmt(globe.lat, "N", "S")}, ${fmt(globe.lon, "E", "W")}`;
-}
+// The coordinates only locate the place; they're deliberately not shown on the page.
 
 const apiKey = window.SNOWGLOBE_CONFIG?.googleMapsApiKey;
 const hasKey = apiKey && apiKey !== "PASTE_YOUR_WEB_KEY_HERE";
