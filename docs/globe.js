@@ -57,6 +57,15 @@ const DEVICE = {
 };
 
 const FLAKE_COUNT = 1200;
+
+// Detail of the real place. errorTarget is the blur (drawing-buffer pixels) a tile may show
+// before a sharper one is loaded: lower is sharper but downloads more tiles.
+const QUALITY = {
+    errorTarget: 4,
+    cacheMinTiles: 900,
+    cacheMaxTiles: 1400,
+    pixelRatio: 2,           // most phones are 3×; 2× is sharp and keeps the GPU cool
+};
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // MARK: - Page setup
@@ -101,7 +110,8 @@ const hasKey = apiKey && apiKey !== "PASTE_YOUR_WEB_KEY_HERE";
 const canvas = document.getElementById("globe");
 const stage = canvas.parentElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, QUALITY.pixelRatio));
+const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
@@ -351,7 +361,7 @@ const raycaster = new THREE.Raycaster();
 let fitted = false;
 let fitAttempts = 0;
 function fitGround() {
-    if (!tiles || fitAttempts > 40) return;
+    if (!tiles || fitAttempts > 60) return;
     globeRoot.updateMatrixWorld(true);
     const down = new THREE.Vector3(0, -1, 0).applyQuaternion(globeRoot.quaternion);
     const samples = [[0, 0]];
@@ -369,10 +379,9 @@ function fitGround() {
     fitAttempts++;
     const shift = METRICS.groundY + 0.004 - lowest;
     diorama.position.y += shift;
-    if (Math.abs(shift) < 0.003 && !fitted) {
-        fitted = true;
-        camera.far = 14;          // the place is in the glass now; skip tiles far outside it
-        camera.updateProjectionMatrix();
+    // Sharper tiles keep nudging the ground a little; close enough (or enough tries) counts as fitted.
+    if (!fitted && (Math.abs(shift) < 0.01 || fitAttempts >= 6)) {
+        fitted = true;            // from now on the far plane hugs the globe (see the render loop)
     }
 }
 
@@ -462,6 +471,11 @@ function startTiles() {
 
     tiles = new TilesRenderer();
     tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: apiKey, autoRefreshToken: true, useRecommendedSettings: true }));
+    // Google's recommended settings allow ~20 px of blur, fine for a map but blocky in a small globe.
+    // The far plane keeps this from loading detail outside the glass.
+    tiles.errorTarget = QUALITY.errorTarget;
+    tiles.lruCache.minSize = QUALITY.cacheMinTiles;
+    tiles.lruCache.maxSize = QUALITY.cacheMaxTiles;
     tiles.registerPlugin(new ReorientationPlugin({
         lat: THREE.MathUtils.degToRad(globe.lat),
         lon: THREE.MathUtils.degToRad(globe.lon),
@@ -480,7 +494,14 @@ function startTiles() {
         model.traverse((child) => {
             if (!child.isMesh) return;
             const materials = Array.isArray(child.material) ? child.material : [child.material];
-            materials.forEach(clipToGlobe);
+            materials.forEach((material) => {
+                clipToGlobe(material);
+                // Sharp textures on walls and streets seen at an angle.
+                if (material.map) {
+                    material.map.anisotropy = maxAnisotropy;
+                    material.map.needsUpdate = true;
+                }
+            });
         });
     });
     tiles.addEventListener("tiles-load-end", () => {
@@ -821,6 +842,14 @@ renderer.setAnimationLoop(() => {
 
     controls.update();
     camera.updateMatrixWorld();
+    if (fitted) {
+        // Only what's inside the glass matters: anything past the back of the globe isn't loaded.
+        const far = camera.position.distanceTo(globeRoot.position) + 1.3;
+        if (Math.abs(camera.far - far) > 0.05) {
+            camera.far = far;
+            camera.updateProjectionMatrix();
+        }
+    }
 
     // The snow feels how the glass moved (spun, rattled) and how the phone moved.
     const motion = tracker.update(globeRoot.position, globeRoot.quaternion, dt);
