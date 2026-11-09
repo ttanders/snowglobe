@@ -125,17 +125,64 @@ a { color: var(--ice); }
     text-align: center;
 }
 
+/* Loading card, in the middle of the glass while the place loads. */
 .status {
     position: absolute;
     left: 50%;
-    bottom: 24px;
-    transform: translateX(-50%);
+    top: 44%;
+    transform: translate(-50%, -50%);
     max-width: min(90%, 360px);
     text-align: center;
     border-radius: 18px;
+    padding: 12px 18px;
 }
 
 .status[hidden] { display: none; }
+
+.status-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.spinner {
+    display: none;
+    flex: none;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    border-top-color: var(--ice);
+    animation: spin 0.9s linear infinite;
+}
+
+.status.loading .spinner { display: block; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.progress {
+    height: 4px;
+    margin-top: 10px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.15);
+    overflow: hidden;
+}
+
+.progress[hidden] { display: none; }
+
+.progress-fill {
+    width: 0;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--ice);
+    transition: width 0.3s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spinner { animation-duration: 2.4s; }
+    .progress-fill { transition: none; }
+}
 
 /* Google requires its name and the data credits to stay visible with the 3D content. */
 .credits {

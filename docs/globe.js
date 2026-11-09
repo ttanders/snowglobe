@@ -82,9 +82,33 @@ const globe = {
 const statusEl = document.getElementById("status");
 const creditsEl = document.getElementById("credits");
 
-function showStatus(message) {
-    statusEl.textContent = message;
+const statusTextEl = document.getElementById("status-text");
+const statusProgressEl = document.getElementById("status-progress");
+const statusFillEl = document.getElementById("status-fill");
+
+/// Shows `message` over the globe ("" hides it). `loading` adds a spinner; `progress` (0…1) a bar.
+function showStatus(message, { loading = false, progress = null } = {}) {
+    statusTextEl.textContent = message;
     statusEl.hidden = !message;
+    statusEl.classList.toggle("loading", loading);
+    statusProgressEl.hidden = progress === null;
+    if (progress !== null) statusFillEl.style.width = `${Math.round(progress * 100)}%`;
+}
+
+/// True from the moment tiles are requested until the place is standing in the glass.
+let isLoadingPlace = false;
+let shownProgress = 0;
+
+function showLoadingProgress() {
+    if (!isLoadingPlace || !tiles) return;
+    // The download queue grows as tiles arrive, so the raw ratio can dip; the bar only moves forward.
+    shownProgress = Math.max(shownProgress, Math.min(tiles.loadProgress || 0, 0.99));
+    showStatus(`Loading the 3D place… ${Math.round(shownProgress * 100)}%`, { loading: true, progress: shownProgress });
+}
+
+function finishLoading(message = "") {
+    isLoadingPlace = false;
+    showStatus(message);
 }
 
 document.title = `${globe.title} · Snowglobe`;
@@ -235,6 +259,27 @@ const snowGround = new THREE.Mesh(
 snowGround.rotation.x = -Math.PI / 2;
 snowGround.position.y = METRICS.groundY + 0.001;
 globeRoot.add(snowGround);
+
+// A soft ring that pulses on the snow while the place loads (like the pulsing outlines on the
+// app's shelf), fading out once the place appears.
+const loadingGlow = new THREE.Mesh(
+    new THREE.RingGeometry(METRICS.dioramaRadius - 0.1, METRICS.dioramaRadius, 96),
+    new THREE.MeshBasicMaterial({ color: 0xa8d9ff, transparent: true, opacity: 0, depthWrite: false,
+        blending: THREE.AdditiveBlending, toneMapped: false }),
+);
+loadingGlow.rotation.x = -Math.PI / 2;
+loadingGlow.position.y = METRICS.groundY + 0.006;
+loadingGlow.renderOrder = 5;
+globeRoot.add(loadingGlow);
+let glowStrength = 0;   // eases toward 1 while loading, 0 after
+
+function stepLoadingGlow(dt, time) {
+    const target = isLoadingPlace ? 1 : 0;
+    glowStrength += (target - glowStrength) * (1 - Math.exp(-dt / 0.35));
+    const pulse = reduceMotion ? 0.6 : 0.45 + 0.4 * Math.sin(time * 3.2);
+    loadingGlow.material.opacity = glowStrength * pulse * 0.55;
+    loadingGlow.visible = glowStrength > 0.01;
+}
 
 // Glass dome: a sphere cut off where it meets the pedestal.
 const glass = new THREE.Mesh(
@@ -399,7 +444,10 @@ function fitGround() {
     fitAttempts++;
     const shift = METRICS.groundY + 0.004 - lowest;
     diorama.position.y += shift;
-    diorama.visible = true;        // standing on the snow now
+    if (!diorama.visible) {
+        diorama.visible = true;    // standing on the snow now: the loading card and glow can go
+        finishLoading();
+    }
     // Sharper tiles keep nudging the ground a little; close enough (or enough tries) counts as fitted.
     if (!fitted && (Math.abs(shift) < 0.01 || fitAttempts >= 6)) {
         fitted = true;            // from now on the far plane hugs the globe (see the render loop)
@@ -530,19 +578,20 @@ function startTiles() {
         fitGround();
         updateCredits();
         if (fitted) {
-            showStatus("");
+            if (isLoadingPlace) finishLoading();
             measureSnowSurfaceSoon();
         } else {
-            showStatus("Building your miniature…");
+            showLoadingProgress();
         }
     });
     tiles.addEventListener("load-error", ({ tile, error }) => {
         console.warn("Snowglobe: tile failed to load", error);
         if (!tile || !loadedAny) {
-            showStatus("Couldn't load this place from Google. The web key may be missing the Map Tiles API or this site's address.");
+            finishLoading("Couldn't load this place from Google. The web key may be missing the Map Tiles API or this site's address.");
         }
     });
-    showStatus("Finding Google's 3D tiles…");
+    isLoadingPlace = true;
+    showStatus("Finding Google's 3D tiles…", { loading: true });
 }
 
 // MARK: - The turntable: drag to spin, tap to flick, double-tap to reset
@@ -841,8 +890,15 @@ if (!hasPlace) {
 const clock = new THREE.Clock();
 const yAxis = new THREE.Vector3(0, 1, 0);
 const zAxis = new THREE.Vector3(0, 0, 1);
+let loadingTicker = 0;
 renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.1);
+    stepLoadingGlow(dt, clock.elapsedTime);
+    loadingTicker += dt;
+    if (loadingTicker > 0.25 && isLoadingPlace && tiles?.loadProgress > 0) {
+        loadingTicker = 0;
+        showLoadingProgress();
+    }
 
     // The turntable keeps spinning after a flick, slowing to a stop.
     if (!drag && Math.abs(spinVelocity) > 0.001) {

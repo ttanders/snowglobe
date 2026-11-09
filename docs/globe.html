@@ -32,7 +32,13 @@
 
         <div class="stage">
             <canvas id="globe" aria-label="3D snowglobe. Drag to spin, pinch or scroll to zoom, tap the glass to make it snow."></canvas>
-            <div class="status glass-pill" id="status">Opening your snowglobe…</div>
+            <div class="status glass-pill loading" id="status" role="status" aria-live="polite">
+                <div class="status-row">
+                    <span class="spinner" aria-hidden="true"></span>
+                    <span id="status-text">Opening your snowglobe…</span>
+                </div>
+                <div class="progress" id="status-progress" hidden><div class="progress-fill" id="status-fill"></div></div>
+            </div>
         </div>
 
         <div class="actions">
