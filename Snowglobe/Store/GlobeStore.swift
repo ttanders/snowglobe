@@ -45,6 +45,14 @@ final class GlobeStore {
         save()
     }
 
+    /// Sets the date engraved under the name on the globe's plaque (nil = name only).
+    /// Photo globes start with the photo's date; this lets the user pick or fix it.
+    func setEngravedDate(id: SnowGlobe.ID, to date: Date?) {
+        guard let index = globes.firstIndex(where: { $0.id == id }) else { return }
+        globes[index].photoDate = date
+        save()
+    }
+
     /// Fixes how much of the place a globe holds (picked once, with the zoom slider; see GlobeSizing).
     func lockSize(id: SnowGlobe.ID, radiusMeters: Double) {
         guard let index = globes.firstIndex(where: { $0.id == id }), !globes[index].isSizeLocked,

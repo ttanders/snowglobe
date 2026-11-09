@@ -42,6 +42,7 @@ struct GlobeSceneView: UIViewRepresentable {
         coordinator.onUserStir = onUserStir
         coordinator.handledShakeRequests = shakeRequests
         coordinator.attach(to: arView, globe: GlobeEntityFactory.makeGlobe(for: globe))
+        coordinator.shownPlaque = GlobeEntityFactory.PlaqueText(for: globe)
         coordinator.showDioramaContent(dioramaContent)
         coordinator.isCovered = isCovered
         return arView
@@ -55,6 +56,12 @@ struct GlobeSceneView: UIViewRepresentable {
         if shakeRequests != coordinator.handledShakeRequests {
             coordinator.handledShakeRequests = shakeRequests
             coordinator.shakeGlobe()
+        }
+        // Renamed, or its engraved date changed: re-engrave the plaque in place.
+        let plaque = GlobeEntityFactory.PlaqueText(for: globe)
+        if plaque != coordinator.shownPlaque, let globeEntity = coordinator.globe {
+            coordinator.shownPlaque = plaque
+            GlobeEntityFactory.updatePlaque(in: globeEntity, for: globe)
         }
     }
 
@@ -146,6 +153,8 @@ final class GlobeSceneCoordinator: NSObject, UIGestureRecognizerDelegate {
 
     /// The globe currently on the turntable.
     private(set) var globe: Entity?
+    /// What the plaque currently says, to notice when it needs re-engraving.
+    var shownPlaque: GlobeEntityFactory.PlaqueText?
 
     func attach(to arView: GlobeARView, globe: Entity) {
         self.arView = arView

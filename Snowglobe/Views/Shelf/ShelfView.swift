@@ -12,6 +12,7 @@
 
 import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ShelfView: View {
     var title = "Snowglobes"
@@ -37,6 +38,16 @@ struct ShelfView: View {
     @State private var deleteTarget: SnowGlobe?
     @State private var globeFrames: [SnowGlobe.ID: CGRect] = [:]
     @State private var drag: DragState?
+    /// The globe being dragged straight out of the hold menu (an iOS system drag, see `liftDrag`).
+    @State private var systemDragID: SnowGlobe.ID?
+    /// The globe that last lifted for its hold menu. iOS lifts it before knowing whether you'll
+    /// just open the menu or start dragging, so it only becomes `systemDragID` once a drag shows up.
+    @State private var liftedID: SnowGlobe.ID?
+    /// Puts a menu-dragged globe back if the drag leaves the shelf and doesn't come back
+    /// (iOS doesn't tell us when a drag is let go somewhere that isn't a drop target).
+    @State private var menuDragTimeout: Task<Void, Never>?
+    /// The globe being deleted right now, so only it shrinks away (the others just slide).
+    @State private var deletingID: SnowGlobe.ID?
     /// Where the page content starts on screen, to turn screen positions into page positions.
     @State private var contentOrigin: CGPoint = .zero
 
@@ -77,6 +88,9 @@ struct ShelfView: View {
                 // Lives on the whole page (not on one globe) so it keeps tracking the finger
                 // even when the dragged globe hops to another shelf.
                 .simultaneousGesture(rearrangeGesture, including: isEditing ? .all : .subviews)
+                // Letting go of a menu-drag anywhere on the page ends it cleanly.
+                .onDrop(of: [.text], delegate: PageDropDelegate(draggingID: $systemDragID, onDragSeen: beginMenuDrag,
+                                                                  onDragLeft: menuDragLeftShelf))
             }
             .scrollDisabled(drag != nil)
             .background {
@@ -214,7 +228,7 @@ struct ShelfView: View {
             .zIndex(1)
 
             // The dragged globe's name plate goes blank until it lands.
-            ShelfPlank(titles: row.map { drag?.id == $0.id ? " " : $0.title },
+            ShelfPlank(titles: row.map { draggedID == $0.id ? " " : $0.title },
                        columns: globesPerShelf, columnSpacing: columnSpacing,
                        grainSeed: UInt64(index + 1))
         }
@@ -234,17 +248,23 @@ struct ShelfView: View {
         // Direction comes from the globe's ID, not its position, so a globe doesn't
         // jolt into the opposite swing every time the order changes.
         .modifier(Wiggle(isActive: isEditing && !reduceMotion, startsClockwise: globe.id.hashValue.isMultiple(of: 2)))
-        .opacity(drag?.id == globe.id ? 0 : 1)
+        .opacity(draggedID == globe.id ? 0 : 1)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
             globeFrames[globe.id] = frame
         }
         // Lets a globe glide (rather than pop) when it moves onto another shelf.
         .matchedGeometryEffect(id: globe.id, in: shelfNamespace)
+        // Home-screen delete: the deleted globe shrinks and fades; a globe that hops onto another
+        // shelf glides there (matchedGeometryEffect) instead of fading out and back in.
+        .transition(deletingID == globe.id ? .scale(scale: 0.2).combined(with: .opacity) : .identity)
         .matchedTransitionSource(id: globe.id, in: zoomNamespace)
         .frame(maxWidth: .infinity)
         // The hold menu is switched off while editing: even an empty menu still grabs the
         // touch, which would stop globes from being dragged.
-        .modifier(MenuUnlessEditing(isEditing: isEditing) {
+        // Outside edit mode the globe is also draggable, so (like a home-screen icon) holding
+        // shows the menu, but moving your finger closes it and picks the globe up instead.
+        // It stays attached until a menu-drag finishes: swapping it off mid-drag would cancel the drag.
+        .modifier(MenuUnlessEditing(isEditing: isEditing && systemDragID == nil, onLift: { liftDrag(globe) }) {
             Button("Edit Shelf", systemImage: "square.grid.2x2") { startEditing() }
             Divider()
             Button(globe.isFavorite ? "Unfavorite" : "Favorite",
@@ -256,10 +276,47 @@ struct ShelfView: View {
                 renameTarget = globe
             }
             Button("Delete", systemImage: "trash", role: .destructive) {
-                store.delete(id: globe.id)
+                delete(globe)
             }
         })
+        // Other globes step aside as a menu-dragged globe passes over them.
+        .onDrop(of: [.text], delegate: GlobeDropDelegate(target: globe, draggingID: $systemDragID, store: store,
+                                                         onDragSeen: beginMenuDrag, onDragLeft: menuDragLeftShelf))
         .accessibilityAction(named: "Edit Shelf") { startEditing() }
+    }
+
+    /// The globe hidden from its slot because it's being dragged (either kind of drag).
+    private var draggedID: SnowGlobe.ID? { drag?.id ?? systemDragID }
+
+    /// A globe lifted for its hold menu. Nothing changes yet: you might only be opening the menu.
+    private func liftDrag(_ globe: SnowGlobe) -> NSItemProvider {
+        liftedID = globe.id
+        return NSItemProvider(object: globe.id.uuidString as NSString)
+    }
+
+    /// The finger moved and the lifted globe is now being dragged over the shelf:
+    /// start rearranging, like the home screen does.
+    /// Also called continuously while the drag moves over the shelf, which keeps it alive.
+    private func beginMenuDrag() {
+        menuDragTimeout?.cancel()
+        menuDragTimeout = nil
+        guard systemDragID == nil, let id = liftedID else { return }
+        liftedID = nil
+        systemDragID = id
+        startEditing()
+    }
+
+    /// The drag moved off the shelf (or off a globe). If nothing on the shelf sees it again within
+    /// a second, it was let go elsewhere: show the globe in its spot again. (Moving between globes
+    /// and the shelf around them cancels this straight away.)
+    private func menuDragLeftShelf() {
+        guard let id = systemDragID else { return }
+        menuDragTimeout?.cancel()
+        menuDragTimeout = Task {
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled, systemDragID == id else { return }
+            withAnimation(.snappy) { systemDragID = nil }
+        }
     }
 
     // MARK: - Edit mode
@@ -361,6 +418,7 @@ struct ShelfView: View {
 
     private func stopEditing() {
         withAnimation(.snappy) { isEditing = false }
+        systemDragID = nil // in case a menu-drag was let go somewhere that isn't a drop target
     }
 
     private func startRename(_ globe: SnowGlobe) {
@@ -368,10 +426,15 @@ struct ShelfView: View {
         renameTarget = globe
     }
 
+    /// Deletes a globe the home-screen way: it shrinks away and the globes after it slide
+    /// forward one spot each, wrapping up onto the shelf above.
     private func delete(_ globe: SnowGlobe) {
-        withAnimation(.snappy) {
+        deletingID = globe.id
+        withAnimation(.spring(duration: 0.45, bounce: 0.15)) {
             store.delete(id: globe.id)
             if visibleGlobes.isEmpty { isEditing = false }
+        } completion: {
+            if deletingID == globe.id { deletingID = nil }
         }
         globeFrames[globe.id] = nil
     }
@@ -395,17 +458,78 @@ struct ShelfView: View {
     }
 }
 
-/// Attaches a context menu only when the shelf isn't in edit mode.
+/// Attaches the hold menu, plus dragging, only when the shelf isn't in edit mode. Having both on
+/// one view gives the home-screen behaviour: hold shows the menu; moving turns it into a drag.
 private struct MenuUnlessEditing<MenuItems: View>: ViewModifier {
     let isEditing: Bool
+    let onLift: () -> NSItemProvider
     @ViewBuilder let menuItems: () -> MenuItems
 
     func body(content: Content) -> some View {
         if isEditing {
             content
         } else {
-            content.contextMenu { menuItems() }
+            content
+                .onDrag(onLift)
+                .contextMenu { menuItems() }
         }
+    }
+}
+
+/// Moves the menu-dragged globe into a globe's spot as the finger passes over it.
+private struct GlobeDropDelegate: DropDelegate {
+    let target: SnowGlobe
+    @Binding var draggingID: SnowGlobe.ID?
+    let store: GlobeStore
+    let onDragSeen: () -> Void
+    let onDragLeft: () -> Void
+
+    func dropEntered(info: DropInfo) {
+        onDragSeen()
+        guard let id = draggingID, id != target.id,
+              let targetIndex = store.globes.firstIndex(where: { $0.id == target.id }) else { return }
+        withAnimation(.spring(duration: 0.3, bounce: 0.2)) {
+            store.move(id: id, to: targetIndex)
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        onDragSeen()
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) {
+        onDragLeft()
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        withAnimation(.snappy) { draggingID = nil }
+        return true
+    }
+}
+
+/// Ends a menu-drag that's let go anywhere else on the page.
+private struct PageDropDelegate: DropDelegate {
+    @Binding var draggingID: SnowGlobe.ID?
+    let onDragSeen: () -> Void
+    let onDragLeft: () -> Void
+
+    func dropEntered(info: DropInfo) {
+        onDragSeen()
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        onDragSeen()
+        return DropProposal(operation: .move)
+    }
+
+    func dropExited(info: DropInfo) {
+        onDragLeft()
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        withAnimation(.snappy) { draggingID = nil }
+        return true
     }
 }
 

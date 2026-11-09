@@ -29,6 +29,13 @@ final class GlobeThumbnailStore {
         images[id]
     }
 
+    /// Re-renders a globe's picture on the next pass (e.g. after its plaque changed).
+    /// The old picture stays on the shelf until the new one is ready.
+    func refresh(_ id: SnowGlobe.ID) {
+        attempted.remove(id)
+        failed.remove(id)
+    }
+
     /// True until the globe's picture is ready or has failed.
     func isLoading(_ id: SnowGlobe.ID) -> Bool {
         images[id] == nil && !failed.contains(id)
@@ -49,6 +56,12 @@ final class GlobeThumbnailStore {
 
             let loader = PhotorealDioramaLoader()
             await loader.load(globe)
+            // Interrupted (the globe list changed and this pass was restarted): not a failure.
+            // Leave it un-attempted so the next pass picks it up again.
+            if Task.isCancelled {
+                attempted.remove(globe.id)
+                return
+            }
             // Only real places get a picture; if loading failed, the outline stays.
             guard loader.phase == .ready, loader.showsRealPlace, let content = loader.content else {
                 failed.insert(globe.id)
@@ -61,6 +74,10 @@ final class GlobeThumbnailStore {
                 attributionsByGlobe[globe.id] = loader.attributions
                 updateAttributions()
             } catch {
+                if Task.isCancelled {
+                    attempted.remove(globe.id)
+                    return
+                }
                 print("GlobeThumbnailStore: couldn't render \(globe.title): \(error)")
                 failed.insert(globe.id)
             }

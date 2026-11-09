@@ -21,7 +21,7 @@ enum GlobeEntityFactory {
     static func makeGlobe(for globe: SnowGlobe, content: Entity? = nil) -> Entity {
         let root = Entity()
         root.name = "SnowGlobe"
-        root.addChild(makePedestal(title: globe.title))
+        root.addChild(makePedestal(title: globe.title, engravedDate: globe.photoDate))
 
         let diorama = Entity()
         diorama.name = "Diorama"
@@ -58,7 +58,38 @@ enum GlobeEntityFactory {
 
     // MARK: - Pedestal
 
-    private static func makePedestal(title: String) -> Entity {
+    /// What's engraved on a globe's plaque; when it changes, the pedestal is rebuilt.
+    struct PlaqueText: Equatable {
+        var title: String
+        var date: Date?
+
+        init(for globe: SnowGlobe) {
+            title = globe.title
+            date = globe.photoDate
+        }
+    }
+
+    /// Swaps in a fresh pedestal so the plaque shows the globe's current name and date.
+    static func updatePlaque(in root: Entity, for globe: SnowGlobe) {
+        for old in root.children.filter({ $0.name == "Pedestal" }) {
+            old.removeFromParent()
+        }
+        root.addChild(makePedestal(title: globe.title, engravedDate: globe.photoDate))
+    }
+
+    /// The date as it's engraved under the name: August 17, 2026 → "08/17/2026".
+    static func engravingText(for date: Date) -> String {
+        engravingFormatter.string(from: date)
+    }
+
+    private static let engravingFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MM/dd/yyyy"
+        return formatter
+    }()
+
+    private static func makePedestal(title: String, engravedDate: Date?) -> Entity {
         let pedestal = Entity()
         pedestal.name = "Pedestal"
         let top = GlobeMetrics.groundY
@@ -85,23 +116,40 @@ enum GlobeEntityFactory {
         collar.position.y = top + 0.005 - 0.025
         pedestal.addChild(collar)
 
-        // Brass plaque with the title on the front (+Z) face.
+        // Brass plaque on the front (+Z) face: the title, and the photo's date engraved underneath.
+        // A little taller when there's a date, so both lines fit.
         let plaqueY = bottom + plinthHeight + bodyHeight / 2
-        let plaque = ModelEntity(mesh: .generateBox(width: 0.64, height: 0.17, depth: 0.02, cornerRadius: 0.008),
+        let plaqueHeight: Float = engravedDate == nil ? 0.17 : 0.21
+        let plaque = ModelEntity(mesh: .generateBox(width: 0.64, height: plaqueHeight, depth: 0.02, cornerRadius: 0.008),
                                  materials: [GlobeMaterials.brass])
         plaque.position = [0, plaqueY, apothem + 0.01]
         pedestal.addChild(plaque)
 
         // Shrink the font for long names so they fit on the plaque.
-        let fontSize = CGFloat(clamp(0.6 / (Float(max(title.count, 1)) * 0.56), 0.035, 0.07))
-        let font = UIFont(name: "Georgia-Bold", size: fontSize) ?? .boldSystemFont(ofSize: fontSize)
-        let textMesh = MeshResource.generateText(title, extrusionDepth: 0.006, font: font,
-                                                 containerFrame: CGRect(x: -0.29, y: -fontSize * 0.8, width: 0.58, height: fontSize * 1.6),
-                                                 alignment: .center, lineBreakMode: .byTruncatingTail)
-        let text = ModelEntity(mesh: textMesh, materials: [GlobeMaterials.engraving])
-        text.position = [0, plaqueY, apothem + 0.021]
-        pedestal.addChild(text)
+        let maxTitleSize: Float = engravedDate == nil ? 0.07 : 0.06
+        let titleSize = CGFloat(clamp(0.6 / (Float(max(title.count, 1)) * 0.56), 0.035, maxTitleSize))
+        let titleFont = UIFont(name: "Georgia-Bold", size: titleSize) ?? .boldSystemFont(ofSize: titleSize)
+        let titleY = engravedDate == nil ? plaqueY : plaqueY + 0.037
+        pedestal.addChild(makeEngraving(title, font: titleFont, y: titleY, z: apothem + 0.021))
+
+        if let engravedDate {
+            let dateSize: CGFloat = 0.042
+            let dateFont = UIFont(name: "Georgia", size: dateSize) ?? .systemFont(ofSize: dateSize)
+            pedestal.addChild(makeEngraving(engravingText(for: engravedDate), font: dateFont,
+                                            y: plaqueY - 0.05, z: apothem + 0.021))
+        }
         return pedestal
+    }
+
+    /// One line of raised dark lettering on the plaque, centred at `y`.
+    private static func makeEngraving(_ string: String, font: UIFont, y: Float, z: Float) -> ModelEntity {
+        let size = font.pointSize
+        let mesh = MeshResource.generateText(string, extrusionDepth: 0.006, font: font,
+                                             containerFrame: CGRect(x: -0.29, y: -size * 0.8, width: 0.58, height: size * 1.6),
+                                             alignment: .center, lineBreakMode: .byTruncatingTail)
+        let text = ModelEntity(mesh: mesh, materials: [GlobeMaterials.engraving])
+        text.position = [0, y, z]
+        return text
     }
 
     // MARK: - Miniature

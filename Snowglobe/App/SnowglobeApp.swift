@@ -22,8 +22,10 @@ struct SnowglobeApp: App {
                 .environment(thumbnails)
                 .font(Theme.font(.body))
                 .preferredColorScheme(.dark)
-                // Render shelf pictures of the real globes in the background (re-runs when globes are added/removed).
-                .task(id: store.globes.map(\.id)) {
+                // Render shelf pictures of the real globes in the background (re-runs when globes are
+                // added/removed, or a plaque's engraved date changes). Keyed by a dictionary, so just
+                // rearranging the shelf doesn't restart it.
+                .task(id: Dictionary(uniqueKeysWithValues: store.globes.map { ($0.id, $0.photoDate) })) {
                     await thumbnails.renderMissing(store.globes)
                 }
         }

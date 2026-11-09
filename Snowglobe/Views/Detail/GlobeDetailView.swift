@@ -16,6 +16,8 @@ struct GlobeDetailView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var loader = PhotorealDioramaLoader()
     @State private var showingAR = false
+    /// True while the plaque's date picker (the pencil next to View in AR) is open.
+    @State private var editingEngraving = false
     /// Size slider position while a new globe's size is being chosen: log2 of the zoom (0 = starting size).
     @State private var zoomLog2: Double = 0
     /// Presses of the Shake button.
@@ -71,6 +73,15 @@ struct GlobeDetailView: View {
                         }
                         .buttonStyle(.glassProminent)
                         .disabled(loader.content == nil)
+                        Button {
+                            editingEngraving = true
+                        } label: {
+                            Image(systemName: "pencil")
+                                .font(Theme.font(.headline, weight: .semibold))
+                        }
+                        .buttonStyle(.glass)
+                        .accessibilityLabel("Edit engraved date")
+                        .accessibilityHint("Chooses the date engraved under the name on the plaque.")
                     }
                     if globe.isSizeLocked && !hasStirredSnow {
                         snowHint
@@ -95,6 +106,14 @@ struct GlobeDetailView: View {
         }
         .sensoryFeedback(trigger: isCovered) { wasCovered, nowCovered in
             wasCovered && !nowCovered ? .impact(weight: .heavy) : nil
+        }
+        .sheet(isPresented: $editingEngraving) {
+            if let globe = store.globe(id: globeID) {
+                EngravingDateSheet(title: globe.title, currentDate: globe.photoDate) { newDate in
+                    store.setEngravedDate(id: globeID, to: newDate)
+                    thumbnails.refresh(globeID) // re-engrave the shelf picture too
+                }
+            }
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
