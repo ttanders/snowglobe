@@ -115,7 +115,7 @@ const rim = new THREE.DirectionalLight(0x99bfff, 1.1);
 rim.position.set(0, 2.5, -3);
 scene.add(key, fill, rim, new THREE.HemisphereLight(0xc8d8ff, 0x2a1d12, 0.35));
 
-// MARK: - The globe (glass, snow, pedestal, shelf)
+// MARK: - The globe (glass, snow, pedestal)
 
 function woodTexture(base, grain, width = 512, height = 128, seed = 7) {
     const c = document.createElement("canvas");
@@ -200,15 +200,6 @@ const snowGround = new THREE.Mesh(
 snowGround.rotation.x = -Math.PI / 2;
 snowGround.position.y = METRICS.groundY + 0.001;
 globeRoot.add(snowGround);
-
-// Spruce shelf the globe stands on (same palette as the app's shelves).
-const shelf = new THREE.Mesh(
-    new THREE.BoxGeometry(3.6, 0.16, 1.7),
-    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7,
-        map: woodTexture("#735430", "#3d2914", 1024, 256, 3) }),
-);
-shelf.position.y = METRICS.baseBottomY - 0.08;
-globeRoot.add(shelf);
 
 // Glass dome: a sphere cut off where it meets the pedestal.
 const glass = new THREE.Mesh(
